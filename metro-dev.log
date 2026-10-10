@@ -1,0 +1,36 @@
+Starting project at D:\all coding related\Haven\Haven
+Logs: D:\all coding related\Haven\Haven\.expo\dev\logs\start.log
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.22 ΓåÆ ~57.0.27
+5 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Android Bundled 50277ms node_modules\expo\AppEntry.js (2828 modules)
+Android Bundled 1486ms node_modules\expo\AppEntry.js (1 module)
+Android Bundled 80ms node_modules\expo\AppEntry.js (1 module)
+
+<--- Last few GCs --->
+
+[9916:000001CA488C7000]  1158862 ms: Scavenge (interleaved) 4088.7 (4095.0) -> 4085.5 (4095.5) MB, pooled: 0 MB, 11.66 / 0.00 ms  (average mu = 0.292, current mu = 0.246) allocation failure; 
+[9916:000001CA488C7000]  1161961 ms: Mark-Compact (reduce) 4092.4 (4098.7) -> 4085.7 (4089.7) MB, pooled: 0 MB, 1995.60 / 0.00 ms  (+ 549.2 ms in 108 steps since start of marking, biggest step 9.3 ms, walltime since start of marking 2754 ms) (average mu =
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 00007FF7828E90C6 node::SetAbortHandler+54
+ 2: 00007FF7828E9604 node::OnFatalError+1284
+ 3: 00007FF7814F3617 v8::Function::NewInstance+423
+ 4: 00007FF7812F3E57 X509_STORE_CTX_get_cert_crl+54423
+ 5: 00007FF7812F7B64 X509_STORE_CTX_get_cert_crl+70052
+ 6: 00007FF781306ACC v8::internal::StrongRootAllocatorBase::deallocate_impl+16604
+ 7: 00007FF78130630B v8::internal::StrongRootAllocatorBase::deallocate_impl+14619
+ 8: 00007FF782C13BAD node::AsyncResource::CallbackScope::CallbackScope+2124541
+ 9: 00007FF7812F1920 X509_STORE_CTX_get_cert_crl+44896
+10: 00007FF78130C17A X509_STORE_set_cleanup+5098
+11: 00007FF781318616 uv_timer_set_repeat+20694
+12: 00007FF780EE9277 v8::CodeEvent::GetFunctionName+131959
+13: 000001CA1FE775FA 
+METRO DEV STARTED

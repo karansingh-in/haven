@@ -48,14 +48,7 @@
         {
           "faceIDPermission": "Allow Haven to use Face ID to protect your space."
         }
-      ],
-      "expo-blur"
-    ],
-    "fonts": [
-      "./assets/fonts/Inter-Regular.woff2",
-      "./assets/fonts/Inter-Medium.woff2",
-      "./assets/fonts/Inter-SemiBold.woff2",
-      "./assets/fonts/Inter-Bold.woff2"
+      ]
     ],
     "experiments": {
       "reactCompiler": true

@@ -1,0 +1,16 @@
+Starting project at D:\all coding related\Haven\Haven
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8084
+
+An update for expo is available: 57.0.22 ΓåÆ ~57.0.27
+5 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Android Bundled 29824ms node_modules\expo\AppEntry.js (2828 modules)
+Android Bundled 1471ms node_modules\expo\AppEntry.js (1 module)
+Android Bundled 1580ms node_modules\expo\AppEntry.js (1 module)
+Android Bundled 84ms node_modules\expo\AppEntry.js (1 module)
+Android Bundled 881ms node_modules\expo\AppEntry.js (1 module)
+STARTED
