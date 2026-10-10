@@ -18,7 +18,6 @@ import {
     KeyboardAvoidingView,
     Linking,
     Modal,
-    RefreshControl,
     NativeModules,
     Platform,
     Pressable,
@@ -67,7 +66,6 @@ import {
     Trash2,
     TrendingUp,
     ExternalLink,
-    RefreshCw,
     X,
 } from "lucide-react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -112,10 +110,10 @@ import {
 } from "./notifications";
 import {
     NEET_EXAM_DATE,
+    SUBREDDITS,
     SYLLABUS,
     computeMockResult,
     deleteMock,
-    fetchRedditFeed,
     getSyllabusProgress,
     getMocks,
     saveMock,
@@ -2494,41 +2492,8 @@ function NeetScreen({ coupleId }) {
 
   const subjectChapters = SYLLABUS.filter((ch) => ch.subject === openSubject);
 
-  // --- reddit feed ---
-  const [posts, setPosts] = useState([]);
-  const [feedLoading, setFeedLoading] = useState(true);
-  const [feedError, setFeedError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const loadFeed = useCallback(async () => {
-    try {
-      setFeedError(false);
-      const list = await fetchRedditFeed();
-      if (list && list.length) setPosts(list);
-      else setFeedError(true);
-    } catch {
-      setFeedError(true);
-    } finally {
-      setFeedLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadFeed();
-  }, [loadFeed]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadFeed();
-    setRefreshing(false);
-  };
-
   return (
-    <ScreenScroll
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.tint} colors={[c.tint]} />
-      }
-    >
+    <ScreenScroll>
       <Rise>
         <View style={styles.pageHeader}>
           <View style={{ flex: 1 }}>
@@ -2669,52 +2634,25 @@ function NeetScreen({ coupleId }) {
         </View>
       </Card>
 
-      {/* 4 — reddit feed */}
-      <SectionHeader
-        title="From the prep community"
-        trailing={
-          <Pressable onPress={loadFeed} hitSlop={10}>
-            <RefreshCw size={15} color={c.label3} />
-          </Pressable>
-        }
-      />
+      {/* 4 — community links */}
+      <SectionHeader title="Community" />
       <Card>
-        {feedLoading ? (
-          <View style={styles.neetFeedEmpty}>
-            <ActivityIndicator color={c.tint} />
-          </View>
-        ) : feedError && !posts.length ? (
-          <View style={styles.neetFeedEmpty}>
-            <Text style={styles.neetFootnote}>Couldn't reach Reddit.</Text>
-            <Pressable onPress={loadFeed} style={[styles.neetRetry, { borderColor: c.separator }]}>
-              <Text style={[styles.neetRetryText, { color: c.tint }]}>Retry</Text>
-            </Pressable>
-          </View>
-        ) : (
-          posts.map((post, index) => (
-            <Pressable
-              key={`${post.id}-${index}`}
-              onPress={() => Linking.openURL(post.url).catch(() => {})}
-              style={({ pressed }) => [styles.neetPostRow, index === 0 && { paddingTop: 0 }, pressed && { opacity: 0.6 }]}
-            >
-              <View style={styles.neetPostHead}>
-                <View style={[styles.neetSubBadge, { backgroundColor: c.fill }]}>
-                  <Text style={[styles.neetSubBadgeText, { color: c.label2 }]}>r/{post.subreddit}</Text>
-                </View>
-                <Text style={styles.neetPostMeta}>
-                  ▲ {post.score} · {post.numComments} comments · {post.timeAgo}
-                </Text>
-                <ExternalLink size={13} color={c.label3} />
+        {SUBREDDITS.map((sub, i) => (
+          <Pressable
+            key={sub.name}
+            onPress={() => Linking.openURL(sub.url).catch(() => {})}
+            style={({ pressed }) => [styles.neetSubRow, i === 0 && { paddingTop: 0 }, pressed && { opacity: 0.6 }]}
+          >
+            <View style={styles.neetSubHead}>
+              <View style={[styles.neetSubBadge, { backgroundColor: c.fill }]}>
+                <Text style={[styles.neetSubBadgeText, { color: c.label2 }]}>{sub.name}</Text>
               </View>
-              <Text style={styles.neetPostTitle} numberOfLines={2}>
-                {post.title}
-              </Text>
-            </Pressable>
-          ))
-        )}
+              <Text style={styles.neetSubDesc}>{sub.desc}</Text>
+              <ExternalLink size={16} color={c.label3} />
+            </View>
+          </Pressable>
+        ))}
       </Card>
-
-      <Text style={styles.neetSourceNote}>Public Reddit posts · refreshes every 5 minutes</Text>
     </ScreenScroll>
   );
 }
@@ -3163,7 +3101,7 @@ const makeStyles = (c) =>
     },
 
     // NEET TAB
-    neetHero: { gap: 4 },
+    neetHero: { gap: 4, paddingHorizontal: 20, paddingVertical: 20 },
     neetHeroLabel: {
       fontSize: 13,
       lineHeight: 18,
@@ -3273,15 +3211,11 @@ const makeStyles = (c) =>
       ...TEXT_FIX,
     },
     neetPostTitle: { fontSize: 15, lineHeight: 21, fontFamily: BODY_MED, color: c.label, ...TEXT_FIX },
-    neetSourceNote: {
-      fontSize: 12,
-      lineHeight: 16,
-      fontFamily: BODY,
-      color: c.label3,
-      textAlign: "center",
-      marginTop: 16,
-      ...TEXT_FIX,
-    },
+    neetSubRow: { paddingVertical: 12 },
+    neetSubHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+    neetSubBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+    neetSubBadgeText: { fontSize: 12, lineHeight: 16, fontFamily: BODY_SEMI, ...TEXT_FIX },
+    neetSubDesc: { fontSize: 13, lineHeight: 18, fontFamily: BODY, color: c.label2, flex: 1, ...TEXT_FIX },
 
     // HEADERS
     homeHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 12 },

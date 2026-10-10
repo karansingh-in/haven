@@ -8,6 +8,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const NEET_EXAM_DATE = '2027-05-04'; // NEET UG 2027 expected date
 
+// Subreddit links (static — no API)
+export const SUBREDDITS = [
+  { name: 'r/Neet_india', url: 'https://reddit.com/r/Neet_india', desc: 'Main NEET prep community' },
+  { name: 'r/JEENEETards', url: 'https://reddit.com/r/JEENEETards', desc: 'JEE + NEET memes & strategy' },
+  { name: 'r/NEETard', url: 'https://reddit.com/r/NEETard', desc: 'Discussion & resources' },
+];
+
 // Percentile table based on 2024-2026 NEET data
 // Format: [score, percentile] - interpolated for scores between
 export const PERCENTILE_TABLE = [

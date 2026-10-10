@@ -1,62 +1,60 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFB1D4"/>
-      <stop offset="50%" stop-color="#F06292"/>
-      <stop offset="100%" stop-color="#C22760"/>
+    <!-- iOS 26 Liquid Glass background - subtle glass morph -->
+    <linearGradient id="glassBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A1628" stop-opacity="0.95"/>
+      <stop offset="50%" stop-color="#0D1B2A" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#14213D" stop-opacity="0.95"/>
     </linearGradient>
-    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFE4ED"/>
-      <stop offset="100%" stop-color="#FFB1D4"/>
+    <linearGradient id="glassHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.12"/>
     </linearGradient>
-    <radialGradient id="glowGrad" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#FFF0F5" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#FFB1D4" stop-opacity="0"/>
+    <radialGradient id="accentGlow" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#007AFF" stop-opacity="0.25"/>
+      <stop offset="60%" stop-color="#007AFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#007AFF" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="timerFill" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#0A84FF"/>
+    </linearGradient>
   </defs>
 
-  <!-- Rounded square background -->
-  <rect width="1024" height="1024" rx="224" fill="url(#bgGrad)"/>
+  <!-- Rounded square background (iOS icon mask radius = 224 for 1024) -->
+  <rect width="1024" height="1024" rx="224" fill="url(#glassBg)"/>
 
-  <!-- Subtle glow -->
-  <ellipse cx="512" cy="380" rx="300" ry="200" fill="url(#glowGrad)"/>
+  <!-- Subtle glass specular highlight (top edge) -->
+  <path d="M0,224 C512,0 512,0 1024,224" fill="url(#glassHighlight)"/>
 
-  <!-- Two interlocking shapes forming a heart/haven - representing two people + study focus -->
+  <!-- Accent glow behind timer -->
+  <ellipse cx="512" cy="360" rx="320" ry="180" fill="url(#accentGlow)"/>
+
+  <!-- Timer ring (8h goal) - glassy stroke -->
   <g transform="translate(512, 512)">
-    <!-- Left curve (person 1) -->
-    <path d="M -140 -20
-             C -200 -20, -240 60, -200 140
-             C -160 220, -60 280, 0 280
-             C 20 280, 40 240, 40 180
-             C 40 100, 0 20, -20 -20
-             C -60 -20, -100 -20, -140 -20"
-          fill="url(#accentGrad)" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
+    <!-- Track -->
+    <circle cx="0" cy="0" r="180" fill="none" stroke="#FFFFFF" stroke-width="10" opacity="0.12"/>
+    <!-- Progress (8h = ~75% of day) -->
+    <circle cx="0" cy="0" r="180" fill="none" stroke="url(#timerFill)" stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="1131" stroke-dashoffset="283"
+            transform="rotate(-90 0 0)" opacity="0.95"/>
+    <!-- Inner glow ring -->
+    <circle cx="0" cy="0" r="180" fill="none" stroke="#007AFF" stroke-width="2" opacity="0.15"/>
 
-    <!-- Right curve (person 2) -->
-    <path d="M 140 -20
-             C 200 -20, 240 60, 200 140
-             C 160 220, 60 280, 0 280
-             C -20 280, -40 240, -40 180
-             C -40 100, 0 20, 20 -20
-             C 60 -20, 100 -20, 140 -20"
-          fill="#FFFFFF" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" opacity="0.95"/>
+    <!-- Central focus dot -->
+    <circle cx="0" cy="0" r="28" fill="#007AFF" opacity="0.25"/>
+    <circle cx="0" cy="0" r="16" fill="#007AFF" opacity="0.5"/>
 
-    <!-- Central timer/focus element - a subtle ring suggesting the 8-hour goal -->
-    <circle cx="0" cy="80" r="68" fill="none" stroke="#FFFFFF" stroke-width="6" opacity="0.35"/>
-    <circle cx="0" cy="80" r="50" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.6"
-            stroke-dasharray="314" stroke-dashoffset="78" stroke-linecap="round"
-            transform="rotate(-90 0 80)"/>
+    <!-- Subtle tick marks (4 quarters) -->
+    <g stroke="#FFFFFF" stroke-width="3" opacity="0.18">
+      <line x1="0" y1="-190" x2="0" y2="-210" transform="rotate(0)"/>
+      <line x1="0" y1="-190" x2="0" y2="-210" transform="rotate(90)"/>
+      <line x1="0" y1="-190" x2="0" y2="-210" transform="rotate(180)"/>
+      <line x1="0" y1="-190" x2="0" y2="-210" transform="rotate(270)"/>
+    </g>
   </g>
 
-  <!-- Small sparkle accents -->
-  <circle cx="280" cy="280" r="16" fill="#FFFFFF" opacity="0.6"/>
-  <circle cx="744" cy="280" r="12" fill="#FFFFFF" opacity="0.5"/>
-  <circle cx="240" cy="760" r="10" fill="#FFFFFF" opacity="0.4"/>
-  <circle cx="784" cy="760" r="14" fill="#FFFFFF" opacity="0.5"/>
-
-  <!-- Tiny hearts as decorative dots -->
-  <g fill="#FFFFFF" opacity="0.35">
-    <path d="M 180 160 C 175 155, 165 155, 160 160 C 155 165, 155 175, 160 180 C 165 185, 175 185, 180 180 C 185 175, 185 165, 180 160" transform="scale(0.6 0.6)"/>
-    <path d="M 844 160 C 839 155, 829 155, 824 160 C 819 165, 819 175, 824 180 C 829 185, 839 185, 844 180 C 849 175, 849 165, 844 160" transform="scale(0.5 0.5)"/>
-  </g>
+  <!-- Bottom specular catch (glass reflection) -->
+  <ellipse cx="512" cy="860" rx="200" ry="40" fill="#FFFFFF" opacity="0.04"/>
 </svg>
