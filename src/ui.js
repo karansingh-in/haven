@@ -3,7 +3,7 @@
 import React, { forwardRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, SafeAreaView, Platform, Image } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { withSpring, useSharedValue, useAnimatedStyle, useAnimatedReaction } from 'react-native-reanimated';
+import { withSpring, useSharedValue, useAnimatedStyle, useAnimatedReaction, Animated } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { theme, useAccent } from './theme';
 
@@ -213,12 +213,104 @@ export const Badge = ({ children, style, variant = 'default', ...props }) => {
 
 // ============================================
 // GlassTabBar — Floating capsule, BlurView, shrink on scroll
-// (Implemented in Task 5 - placeholder here)
 // ============================================
-export const GlassTabBar = ({ tabs, active, onPress }) => {
+const TAB_ICONS = {
+  Today: 'heart',
+  Calendar: 'calendar',
+  Study: 'timer',
+  Insights: 'trending-up',
+  NEET: 'target',
+};
+
+export const GlassTabBar = ({ tabs, active, onPress, scrollY }) => {
+  const colorScheme = useColorScheme();
+  const colors = colorScheme === 'dark' ? theme.colors.dark : theme.colors.light;
+  const accent = colors.accent;
+  const { useAccent } = require('./theme');
+  
+  const translateX = useSharedValue(0);
+  const activeIndex = tabs.indexOf(active);
+  const tabWidth = useSharedValue(0);
+  const containerWidth = useSharedValue(0);
+  const shrinkAmount = useSharedValue(0);
+
+  // Calculate active tab position
+  useAnimatedReaction(
+    () => activeIndex,
+    (current, previous) => {
+      if (current !== previous) {
+        translateX.value = withSpring(current * tabWidth.value, theme.springs.snappy);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  );
+
+  // Handle scroll shrink/expand
+  useAnimatedReaction(
+    () => scrollY?.value ?? 0,
+    (current, previous) => {
+      if (previous === undefined) return;
+      const delta = current - previous;
+      const newShrink = Math.max(0, Math.min(1, shrinkAmount.value + delta * 0.02));
+      if (delta < 0 && current < previous) {
+        // Scrolling up - expand
+        shrinkAmount.value = withSpring(Math.max(0, shrinkAmount.value - 0.1), theme.springs.gentle);
+      } else if (delta > 0) {
+        // Scrolling down - shrink
+        shrinkAmount.value = withSpring(Math.min(1, shrinkAmount.value + 0.1), theme.springs.gentle);
+      }
+    }
+  );
+
+  const tabBarHeight = useAnimatedStyle(() => ({
+    height: 56 + 8 - shrinkAmount.value * 12,
+    borderRadius: 16 + shrinkAmount.value * 4,
+    opacity: 1 - shrinkAmount.value * 0.1,
+  }));
+
+  const activePillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+    width: tabWidth.value,
+    height: '100%',
+    borderRadius: 16 + shrinkAmount.value * 4,
+  }));
+
   return (
-    <View style={styles.glassTabBarPlaceholder}>
-      <Text>GlassTabBar: {active}</Text>
+    <View style={styles.glassTabBarContainer}>
+      <BlurView
+        intensity={60}
+        style={[
+          styles.glassTabBar,
+          tabBarHeight,
+        ]}
+        onLayout={(e) => { containerWidth.value = e.nativeEvent.layout.width; }}
+      >
+        <View style={styles.tabBarInner} onLayout={(e) => { tabWidth.value = e.nativeEvent.layout.width / tabs.length; }}>
+          <Animated.View style={[styles.activePill, activePillStyle]} />
+          {tabs.map((tab, index) => (
+            <Pressable
+              key={tab}
+              onPress={() => onPress(tab)}
+              style={({ pressed }) => [
+                styles.tabButton,
+                { width: tabWidth.value },
+                pressed && { opacity: 0.7 },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  index === activeIndex ? styles.tabLabelActive : styles.tabLabelInactive,
+                  { color: index === activeIndex ? '#FFFFFF' : colors.label.secondary },
+                ]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </BlurView>
     </View>
   );
 };
@@ -339,6 +431,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  glassTabBarContainer: {
+    position: 'absolute',
+    bottom: theme.space.lg,
+    left: theme.space.lg,
+    right: theme.space.lg,
+    zIndex: 100,
+  },
+  glassTabBar: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    overflow: 'hidden',
+  },
+  tabBarInner: {
+    flexDirection: 'row',
+    height: '100%',
+  },
+  activePill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#007AFF', // Will be overridden by animated style
+    borderRadius: 16,
+  },
+  tabButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 44,
+  },
+  tabLabel: {
+    ...theme.typography.footnote,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    fontWeight: '600',
+  },
+  tabLabelInactive: {
+    fontWeight: '400',
   },
   sheetOverlay: {
     ...StyleSheet.absoluteFillObject,
