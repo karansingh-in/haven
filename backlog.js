@@ -26,7 +26,22 @@ export function previousDayKey(key) {
 
 export const backlogKeyFor = (coupleId) => `haven-backlog-${coupleId}`;
 export const achievedKeyFor = (coupleId) => `haven-achieved-${coupleId}`;
+export const goldDaysKeyFor = (coupleId) => `haven-golddays-${coupleId}`;
 export const prefsKey = "haven-prefs-v1";
+
+// True only on the render that crosses the goal, so a celebration cannot fire
+// twice for the same 8h mark (479 -> 480 yes, 480 -> 520 no).
+export function goalReached(prevMinutes, nextMinutes, goal = DAILY_GOAL_MINUTES) {
+  return (Number(prevMinutes) || 0) < goal && (Number(nextMinutes) || 0) >= goal;
+}
+
+// Pure: returns a new sorted, de-duplicated array so callers can set state
+// directly without worrying about mutation.
+export function addGoldDay(days = [], key) {
+  const list = (Array.isArray(days) ? days : []).filter(Boolean);
+  if (!key) return [...new Set(list)].sort();
+  return [...new Set([...list, key])].sort();
+}
 
 // Chronological running backlog across ALL logged days, floor at 0.
 // balance = max(0, balance + (GOAL - dayMinutes))

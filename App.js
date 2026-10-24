@@ -91,6 +91,7 @@ import {
 } from "./firebase";
 import {
     achievedKeyFor,
+    addGoldDay,
     backlogKeyFor,
     computeBacklog,
     computeStreak,
@@ -98,6 +99,8 @@ import {
     dayKeyFor,
     DEFAULT_PREFS,
     formatBacklog,
+    goalReached,
+    goldDaysKeyFor,
     gradeFor,
     loadPrefs,
     savePrefs,
@@ -946,6 +949,12 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [celebration, setCelebration] = useState(null);
+  // Goal-met days, persisted per couple. Loaded and written here; Task 7 reads
+  // `goldDays` for the overlay count.
+  // eslint-disable-next-line no-unused-vars
+  const [goldDays, setGoldDays] = useState([]);
+  // Previous day total, so the goal celebration fires only on the crossing.
+  const prevTodayRef = useRef(0);
 
   const timer = useStudyTimer(coupleId);
   const tick = useMinuteTick();
@@ -1020,14 +1029,48 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 
   useEffect(() => {
     if (!coupleId) return;
-    const check = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const todayDone = backlog.todayMinutes >= DAILY_GOAL_MINUTES;
+        const raw = await AsyncStorage.getItem(goldDaysKeyFor(coupleId));
+        // addGoldDay normalises: corrupt or non-array JSON loads as [].
+        const days = raw ? addGoldDay(JSON.parse(raw)) : [];
+        if (!cancelled) setGoldDays(days);
+      } catch {
+        if (!cancelled) setGoldDays([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coupleId]);
+
+  useEffect(() => {
+    if (!coupleId) return;
+    const check = async () => {
+      // Read then write inside the debounced callback, never at effect start:
+      // a rapid 470 -> 480 sequence must still judge 470 as the previous total.
+      const prevToday = prevTodayRef.current;
+      prevTodayRef.current = backlog.todayMinutes;
+      try {
         const achievedRaw = await AsyncStorage.getItem(achievedKeyFor(coupleId));
         const achievedDate = achievedRaw || "";
-        if (todayDone && achievedDate !== backlog.todayKey) {
+        if (goalReached(prevToday, backlog.todayMinutes) && achievedDate !== backlog.todayKey) {
           await AsyncStorage.setItem(achievedKeyFor(coupleId), backlog.todayKey);
           setCelebration({ kind: "goal", detail: `${formatDuration(backlog.todayMinutes)} logged today.` });
+          // Gold-day bookkeeping never blocks the overlay above.
+          try {
+            const goldRaw = await AsyncStorage.getItem(goldDaysKeyFor(coupleId));
+            let stored = [];
+            try {
+              stored = goldRaw ? JSON.parse(goldRaw) : [];
+            } catch {
+              stored = []; // corrupt JSON must not lose the day
+            }
+            const next = addGoldDay(stored, backlog.todayKey);
+            await AsyncStorage.setItem(goldDaysKeyFor(coupleId), JSON.stringify(next));
+            setGoldDays(next);
+          } catch {}
           return;
         }
         const prevRaw = await AsyncStorage.getItem(backlogKeyFor(coupleId));
@@ -1057,7 +1100,6 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
           timer={timer}
           backlog={backlog}
           streak={streak}
-          onCelebrate={(kind, detail) => setCelebration({ kind, detail })}
         />
       );
     }
@@ -1899,7 +1941,7 @@ function CalendarScreen({ coupleData, coupleId }) {
 // STUDY
 // ============================================================
 
-function StudyScreen({ coupleData, coupleId, timer, backlog, streak, onCelebrate }) {
+function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   const { c } = useTheme();
   const styles = useStyles();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1953,15 +1995,6 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, onCelebrate
       updatedSubjects,
     );
     timer.reset();
-    const newToday = todayMinutes + minutes;
-    if (todayMinutes < DAILY_GOAL_MINUTES && newToday >= DAILY_GOAL_MINUTES) {
-      onCelebrate?.("goal", `${formatDuration(newToday)} logged today.`);
-    } else if (backlogMinutes > 0) {
-      const after = computeBacklog([...(coupleData.studyLogs || []), { date: today, duration: minutes }]);
-      if (after.balanceMinutes < backlogMinutes) {
-        onCelebrate?.("backlog", `Backlog cut to ${formatDuration(after.balanceMinutes)}.`);
-      }
-    }
   };
 
   const removeLog = (log) => {
