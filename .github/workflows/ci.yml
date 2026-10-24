@@ -17,3 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx jest --ci
+      # DST assertions only bite in a zone that observes DST; UTC would hide them.
+      - run: npx jest tests/rollover.test.js --ci
+        env:
+          TZ: America/New_York
