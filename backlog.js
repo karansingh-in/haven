@@ -14,13 +14,23 @@ export function dayKeyFor(date = new Date(), rolloverHour = ROLLOVER_HOUR) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// Stepping a day on the key alone: no time-of-day component exists, so a DST
+// spring-forward day cannot normalise the cursor onto the day it came from.
+export function previousDayKey(key) {
+  const [year, month, day] = String(key).split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() - 1);
+  const p = (v) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export const backlogKeyFor = (coupleId) => `haven-backlog-${coupleId}`;
 export const achievedKeyFor = (coupleId) => `haven-achieved-${coupleId}`;
 export const prefsKey = "haven-prefs-v1";
 
 // Chronological running backlog across ALL logged days, floor at 0.
 // balance = max(0, balance + (GOAL - dayMinutes))
-export function computeBacklog(studyLogs = [], goalMinutes = DAILY_GOAL_MINUTES, rolloverHour = ROLLOVER_HOUR) {
+export function computeBacklog(studyLogs = [], goalMinutes = DAILY_GOAL_MINUTES, rolloverHour = ROLLOVER_HOUR, now = new Date()) {
   const byDay = {};
   (Array.isArray(studyLogs) ? studyLogs : []).forEach((log) => {
     if (!log?.date) return;
@@ -33,7 +43,7 @@ export function computeBacklog(studyLogs = [], goalMinutes = DAILY_GOAL_MINUTES,
     balance = Math.max(0, balance + (goalMinutes - minutes));
     return { date, minutes, balanceAfter: balance };
   });
-  const todayKey = dayKeyFor(new Date(), rolloverHour);
+  const todayKey = dayKeyFor(now, rolloverHour);
   const todayMinutes = byDay[todayKey] || 0;
   return { balanceMinutes: balance, perDay, todayMinutes, todayKey, byDay };
 }
@@ -55,25 +65,20 @@ export function formatHoursShort(minutes) {
 }
 
 // Streak: consecutive days ending today (or yesterday if today empty) with >= streakMin minutes.
-export function computeStreak(studyLogs = [], streakMin = STREAK_MIN_MINUTES, rolloverHour = ROLLOVER_HOUR) {
+export function computeStreak(studyLogs = [], streakMin = STREAK_MIN_MINUTES, rolloverHour = ROLLOVER_HOUR, now = new Date()) {
   const byDay = {};
   (Array.isArray(studyLogs) ? studyLogs : []).forEach((log) => {
     if (!log?.date) return;
     byDay[log.date] = (byDay[log.date] || 0) + (Number(log.duration) || 0);
   });
-  let cursor = new Date();
+  let key = dayKeyFor(now, rolloverHour);
   // If the logical today has nothing yet, streak may still be alive via yesterday.
-  if ((byDay[dayKeyFor(cursor, rolloverHour)] || 0) < streakMin) {
-    cursor = new Date(cursor);
-    cursor.setDate(cursor.getDate() - 1);
-  }
+  if ((byDay[key] || 0) < streakMin) key = previousDayKey(key);
   let streak = 0;
   for (let i = 0; i < 365; i++) {
-    const k = dayKeyFor(cursor, rolloverHour);
-    if ((byDay[k] || 0) >= streakMin) {
+    if ((byDay[key] || 0) >= streakMin) {
       streak += 1;
-      cursor = new Date(cursor);
-      cursor.setDate(cursor.getDate() - 1);
+      key = previousDayKey(key);
     } else break;
   }
   return streak;
