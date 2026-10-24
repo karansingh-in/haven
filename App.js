@@ -95,6 +95,7 @@ import {
     computeBacklog,
     computeStreak,
     DAILY_GOAL_MINUTES,
+    dayKeyFor,
     DEFAULT_PREFS,
     formatBacklog,
     gradeFor,
@@ -393,7 +394,7 @@ const getDaysBetween = (start, end) => {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 };
 
-const getTodayKey = () => formatDateKey(new Date());
+const getTodayKey = () => dayKeyFor(new Date());
 
 const formatReadableDate = (dateKey) => {
   const date = parseDateKey(dateKey);
@@ -414,7 +415,7 @@ const formatShortDate = (dateKey) => {
 const formatRelativeDate = (dateKey) => {
   const date = parseDateKey(dateKey);
   if (!date) return dateKey;
-  const diff = getDaysBetween(date, new Date());
+  const diff = getDaysBetween(date, parseDateKey(dayKeyFor()));
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
   if (diff > 1 && diff < 7) return `${diff} days ago`;
@@ -924,6 +925,17 @@ function AuthScreen() {
 // LAYOUT — floating pill tab bar
 // ============================================================
 
+// Re-renders once a minute so day-dependent memos recompute when the 3am
+// logical day rolls over, without waiting for user interaction.
+function useMinuteTick() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+  return tick;
+}
+
 function MainAppLayout({ profile, coupleData, coupleId }) {
   const { scheme } = useTheme();
   const { prefs } = usePrefs();
@@ -936,9 +948,14 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   const [celebration, setCelebration] = useState(null);
 
   const timer = useStudyTimer(coupleId);
-  const backlog = useMemo(() => computeBacklog(coupleData.studyLogs), [coupleData.studyLogs]);
+  const tick = useMinuteTick();
+  // `tick` is not read inside the memos: it only schedules a recompute so the
+  // 3am rollover lands without waiting for the next user interaction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const backlog = useMemo(() => computeBacklog(coupleData.studyLogs), [coupleData.studyLogs, tick]);
   const daysLeft = Math.max(0, Math.floor((new Date(`${NEET_EXAM_DATE}T00:00:00`).getTime() - Date.now()) / 86400000));
-  const streak = useMemo(() => computeStreak(coupleData.studyLogs), [coupleData.studyLogs]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const streak = useMemo(() => computeStreak(coupleData.studyLogs), [coupleData.studyLogs, tick]);
 
   useEffect(() => {
     ensureNotificationSetup();
@@ -1689,7 +1706,7 @@ function CalendarScreen({ coupleData, coupleId }) {
   const { c } = useTheme();
   const styles = useStyles();
   const periods = normalizePeriods(coupleData.periods);
-  const [displayDate, setDisplayDate] = useState(new Date());
+  const [displayDate, setDisplayDate] = useState(() => parseDateKey(dayKeyFor()));
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
@@ -1928,9 +1945,11 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, onCelebrate
     if (!cleanedSubject) throw new Error("Add a subject first.");
     if (!minutes || minutes <= 0) throw new Error("Set how long you studied.");
     const updatedSubjects = [cleanedSubject, ...recentSubjects.filter((item) => item !== cleanedSubject)].slice(0, 6);
+    // Stamp with the logical day at save time, not the day the screen rendered on.
+    const stamp = dayKeyFor(new Date());
     await logStudySession(
       coupleId,
-      { subject: cleanedSubject, duration: minutes, notes: notes.trim(), date: today, timestamp: Date.now() },
+      { subject: cleanedSubject, duration: minutes, notes: notes.trim(), date: stamp, timestamp: Date.now() },
       updatedSubjects,
     );
     timer.reset();
@@ -2174,8 +2193,8 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak }) {
   const uniqueStudyDays = new Set(logs.map((l) => l?.date).filter(Boolean)).size;
 
   const monthlyMinutes = useMemo(() => {
-    const now = new Date();
-    const prefix = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    const anchor = parseDateKey(dayKeyFor());
+    const prefix = `${anchor.getFullYear()}-${pad(anchor.getMonth() + 1)}`;
     return logs
       .filter((l) => typeof l?.date === "string" && l.date.startsWith(prefix))
       .reduce((sum, l) => sum + (Number(l.duration) || 0), 0);
@@ -2183,8 +2202,9 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak }) {
 
   const weekly = useMemo(() => {
     const days = [];
+    const anchor = parseDateKey(dayKeyFor());
     for (let i = 6; i >= 0; i--) {
-      const date = new Date();
+      const date = new Date(anchor);
       date.setDate(date.getDate() - i);
       const key = formatDateKey(date);
       const minutes = logs.filter((l) => l?.date === key).reduce((sum, l) => sum + (Number(l.duration) || 0), 0);
