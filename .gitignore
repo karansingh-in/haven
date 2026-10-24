@@ -41,3 +41,17 @@ example
 # generated native folders
 /ios
 /android
+
+# build artifacts and local logs
+dist-new/
+dist-pink/
+dist-icon/
+dist-web/
+*.apk
+*.aab
+*.zip
+*.log
+*.ico.bak
+
+# agent scratch (plans, ledgers, review packages)
+.superpowers/
