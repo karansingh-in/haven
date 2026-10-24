@@ -3,7 +3,7 @@
     "name": "Haven",
     "slug": "Haven",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "haven",
     "userInterfaceStyle": "automatic",
@@ -11,6 +11,7 @@
       "icon": "./assets/images/icon.png",
       "userInterfaceStyle": "automatic",
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "com.anonymous.Haven"
     },
     "android": {

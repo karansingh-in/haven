@@ -28,6 +28,7 @@ import {
     Text,
     TextInput,
     useColorScheme,
+    useWindowDimensions,
     View,
 } from "react-native";
 import {
@@ -257,6 +258,25 @@ const DARK = {
 
 const THEME_KEY = "haven-appearance";
 const TAB_BAR_HEIGHT = 76;
+
+// Responsive shell. 1024pt iPad portrait is exactly the breakpoint, so the
+// comparison is inclusive: the rail must appear in portrait, not only landscape.
+const WIDE_BREAKPOINT = 1000;
+const RAIL_WIDTH = 92;
+// Reading width: a phone-width column on small screens, wider on iPad so
+// Task 9's two-column content still has room to breathe.
+const READING_WIDTH = { narrow: 820, wide: 1100 };
+
+// One source of truth for the five destinations. The bottom pill and the iPad
+// rail both render from this array; only their button components differ.
+// `dot` is injected per render (see MainAppLayout) because it tracks the timer.
+const TABS = [
+  { key: "home", label: "Today", icon: Heart },
+  { key: "calendar", label: "Calendar", icon: CalendarDays },
+  { key: "study", label: "Study", icon: Timer },
+  { key: "insights", label: "Insights", icon: TrendingUp },
+  { key: "neet", label: "NEET", icon: Target },
+];
 
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTHS = [
@@ -960,11 +980,41 @@ function useReducedMotion() {
   return on;
 }
 
+// ============================================================
+// RESPONSIVE SHELL
+// ============================================================
+
+// Width comes from useWindowDimensions on every render, so rotation, Split
+// View and Stage Manager resizes re-lay-out live. Never Dimensions.get.
+function useLayout() {
+  const { width, height } = useWindowDimensions();
+  return {
+    width,
+    height,
+    isWide: width >= WIDE_BREAKPOINT,
+    isTablet: width >= 744,
+  };
+}
+
+// Two columns on wide screens, stacked below the breakpoint. Task 9 consumes
+// this; the shell only provides it.
+function Split({ left, right, gap = 20 }) {
+  const { isWide } = useLayout();
+  const column = isWide ? { flex: 1, minWidth: 0 } : null;
+  return (
+    <View style={{ flexDirection: isWide ? "row" : "column", gap }}>
+      <View style={column}>{left}</View>
+      <View style={column}>{right}</View>
+    </View>
+  );
+}
+
 function MainAppLayout({ profile, coupleData, coupleId }) {
   const { scheme } = useTheme();
   const { prefs } = usePrefs();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const { isWide } = useLayout();
 
   const [tab, setTab] = useState("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1116,6 +1166,13 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
     setTab(next);
   };
 
+  // Same TABS array as the rail, with the running-timer dot resolved here so
+  // both bars stay in sync off one definition.
+  const tabs = useMemo(
+    () => TABS.map((t) => ({ ...t, dot: t.key === "study" && timer.running })),
+    [timer.running],
+  );
+
   const screen = () => {
     if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} />;
     if (tab === "study") {
@@ -1149,18 +1206,28 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 
   return (
     <View style={{ flex: 1 }}>
-      {screen()}
-
-      <View style={[styles.pillBar, { bottom: insets.bottom + 14 }]}>
-        <BlurView intensity={scheme === "dark" ? 50 : 80} tint={scheme} style={StyleSheet.absoluteFill} />
-        <View style={styles.pillRow}>
-          <TabButton icon={Heart} label="Today" active={tab === "home"} onPress={() => go("home")} />
-          <TabButton icon={CalendarDays} label="Calendar" active={tab === "calendar"} onPress={() => go("calendar")} />
-          <TabButton icon={Timer} label="Study" active={tab === "study"} dot={timer.running} onPress={() => go("study")} />
-          <TabButton icon={TrendingUp} label="Insights" active={tab === "insights"} onPress={() => go("insights")} />
-          <TabButton icon={Target} label="NEET" active={tab === "neet"} onPress={() => go("neet")} />
-        </View>
+      <View style={{ flex: 1, flexDirection: isWide ? "row" : "column" }}>
+        {isWide ? <Rail tabs={tabs} active={tab} onPress={go} /> : null}
+        <View style={{ flex: 1 }}>{screen()}</View>
       </View>
+
+      {isWide ? null : (
+        <View style={[styles.pillBar, { bottom: insets.bottom + 14 }]}>
+          <BlurView intensity={scheme === "dark" ? 50 : 80} tint={scheme} style={StyleSheet.absoluteFill} />
+          <View style={styles.pillRow}>
+            {tabs.map((t) => (
+              <TabButton
+                key={t.key}
+                icon={t.icon}
+                label={t.label}
+                active={tab === t.key}
+                dot={t.dot}
+                onPress={() => go(t.key)}
+              />
+            ))}
+          </View>
+        </View>
+      )}
 
       <SettingsSheet visible={settingsOpen} profile={profile} onClose={() => setSettingsOpen(false)} onLockNow={() => setLocked(true)} />
       <CelebrationOverlay
@@ -1206,6 +1273,64 @@ function TabButton({ icon: Icon, label, active, dot, onPress }) {
   );
 }
 
+function Rail({ tabs, active, onPress }) {
+  const { c } = useTheme();
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      style={[
+        styles.rail,
+        {
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 12,
+          backgroundColor: c.bg,
+          borderRightColor: c.separator,
+        },
+      ]}
+    >
+      {tabs.map((t) => (
+        <RailButton
+          key={t.key}
+          icon={t.icon}
+          label={t.label}
+          active={active === t.key}
+          dot={t.dot}
+          onPress={() => onPress(t.key)}
+        />
+      ))}
+    </View>
+  );
+}
+
+// Vertical sibling of TabButton. The pill's capsule background is shaped for a
+// horizontal bar, so the rail gets its own tintSoft rounded rect instead.
+function RailButton({ icon: Icon, label, active, dot, onPress }) {
+  const { c } = useTheme();
+  const styles = useStyles();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.railTab,
+        active && { backgroundColor: c.tintSoft },
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <View>
+        <Icon size={22} color={active ? c.tint : c.label3} strokeWidth={active ? 2.4 : 1.9} />
+        {dot ? <View style={[styles.railDot, { backgroundColor: c.tint }]} /> : null}
+      </View>
+      <Text style={[styles.railLabel, { color: active ? c.label : c.label3 }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 // ============================================================
 // PRIMITIVES
 // ============================================================
@@ -1236,6 +1361,7 @@ function ScreenScroll({ children, extraBottom = 0, refreshControl }) {
   const { c } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const { isWide } = useLayout();
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <ScrollView
@@ -1243,7 +1369,16 @@ function ScreenScroll({ children, extraBottom = 0, refreshControl }) {
         refreshControl={refreshControl}
         contentContainerStyle={[
           styles.screenContent,
-          { paddingTop: insets.top + 12, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 30 + extraBottom },
+          {
+            // Cap the reading measure and centre it. The width has to stay
+            // fluid (maxWidth, not a fixed width) so Task 9's columns fit.
+            width: "100%",
+            maxWidth: isWide ? READING_WIDTH.wide : READING_WIDTH.narrow,
+            alignSelf: "center",
+            paddingTop: insets.top + 12,
+            // The pill bar is gone on wide screens, so its clearance is too.
+            paddingBottom: (isWide ? 0 : TAB_BAR_HEIGHT) + insets.bottom + 30 + extraBottom,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -3846,6 +3981,20 @@ const makeStyles = (c) =>
     pillActive: { position: "absolute", top: 0, bottom: 0, left: 4, right: 4, borderRadius: 20 },
     pillLabel: { fontSize: 10, lineHeight: 14, fontFamily: BODY_MED, ...TEXT_FIX },
     pillDot: { position: "absolute", top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" },
+
+    // IPAD SIDE RAIL — same family as the pill bar: bg + hairline separator.
+    rail: { width: RAIL_WIDTH, borderRightWidth: HAIRLINE, paddingHorizontal: 6, gap: 6 },
+    railTab: {
+      minHeight: 56,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+    },
+    railLabel: { fontSize: 10, lineHeight: 14, fontFamily: BODY_MED, ...TEXT_FIX },
+    railDot: { position: "absolute", top: -2, right: -5, width: 7, height: 7, borderRadius: 4 },
 
     // CELEBRATION
     celebrateBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 28 },
