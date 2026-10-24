@@ -937,6 +937,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 
   const timer = useStudyTimer(coupleId);
   const backlog = useMemo(() => computeBacklog(coupleData.studyLogs), [coupleData.studyLogs]);
+  const daysLeft = Math.max(0, Math.floor((new Date(`${NEET_EXAM_DATE}T00:00:00`).getTime() - Date.now()) / 86400000));
   const streak = useMemo(() => computeStreak(coupleData.studyLogs), [coupleData.studyLogs]);
 
   useEffect(() => {
@@ -960,20 +961,21 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         todayText: `${formatDuration(backlog.todayMinutes)} studied`,
         backlogText: backlog.balanceMinutes === 0 ? "backlog clear" : formatBacklog(backlog.balanceMinutes),
         streak,
+        daysLeft,
       });
     }, 1500);
     return () => clearTimeout(id);
-  }, [backlog.todayMinutes, backlog.balanceMinutes, streak]);
+  }, [backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft]);
 
   useEffect(() => {
     try {
       NativeModules.HavenWidget?.updateWidget(
         `${formatHoursShort(backlog.todayMinutes)}h today`,
-        backlog.balanceMinutes === 0 ? "Backlog clear" : formatBacklog(backlog.balanceMinutes),
+        `${daysLeft}d to NEET · ${backlog.balanceMinutes === 0 ? "Backlog clear" : formatBacklog(backlog.balanceMinutes)}`,
         streak || 0,
       );
     } catch {}
-  }, [backlog.todayMinutes, backlog.balanceMinutes, streak]);
+  }, [backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft]);
 
   const lastActive = useRef(Date.now());
   useEffect(() => {
@@ -2509,7 +2511,7 @@ function NeetScreen({ coupleId }) {
 
       {/* 1 — countdown + competition */}
       <Rise delay={70}>
-        <Card style={styles.neetHero}>
+        <Card style={styles.neetHero} padding={0}>
           <Text style={styles.neetHeroLabel}>Days to exam · {formatShortDateFromISO(NEET_EXAM_DATE)}</Text>
           <Text style={styles.neetDays}>
             {daysLeft}
@@ -2549,7 +2551,7 @@ function NeetScreen({ coupleId }) {
 
       {/* 2 — mock predictor */}
       <SectionHeader title="Mock predictor" />
-      <Card>
+      <Card style={{ padding: 20 }}>
         <Text style={styles.neetFootnote}>Log a mock to see percentile, AIR range and where you stand against last year's cutoff.</Text>
         <View style={styles.neetFieldRow}>
           <TextInput
@@ -2603,7 +2605,7 @@ function NeetScreen({ coupleId }) {
         title="Syllabus"
         trailing={<Text style={styles.neetProgress}>{syllabusState.percent}% covered</Text>}
       />
-      <Card>
+      <Card style={{ padding: 20 }}>
         <Segmented
           options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
           value={openSubject}
@@ -2636,7 +2638,7 @@ function NeetScreen({ coupleId }) {
 
       {/* 4 — community links */}
       <SectionHeader title="Community" />
-      <Card>
+      <Card style={{ padding: 20 }}>
         {SUBREDDITS.map((sub, i) => (
           <Pressable
             key={sub.name}

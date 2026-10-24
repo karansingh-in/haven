@@ -1,11 +1,11 @@
 // ui.js — Haven primitive components (iOS 26 design language)
 
 import React, { forwardRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, SafeAreaView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, SafeAreaView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { withSpring, useSharedValue, useAnimatedStyle, useAnimatedReaction, Animated } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { theme, useAccent } from './theme';
+import { theme } from './theme';
 
 // ============================================
 // PressableScale — 0.97 press with haptic
@@ -18,11 +18,13 @@ export const PressableScale = forwardRef(({ children, onPress, haptic = 'light',
   }));
 
   const handlePressIn = () => {
+    // eslint-disable-next-line react-hooks/immutability
     scale.value = withSpring(0.97, theme.springs.snappy);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle[haptic.charAt(0).toUpperCase() + haptic.slice(1)] || Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handlePressOut = () => {
+    // eslint-disable-next-line react-hooks/immutability
     scale.value = withSpring(1, theme.springs.gentle);
   };
 
@@ -214,20 +216,10 @@ export const Badge = ({ children, style, variant = 'default', ...props }) => {
 // ============================================
 // GlassTabBar — Floating capsule, BlurView, shrink on scroll
 // ============================================
-const TAB_ICONS = {
-  Today: 'heart',
-  Calendar: 'calendar',
-  Study: 'timer',
-  Insights: 'trending-up',
-  NEET: 'target',
-};
-
 export const GlassTabBar = ({ tabs, active, onPress, scrollY }) => {
   const colorScheme = useColorScheme();
   const colors = colorScheme === 'dark' ? theme.colors.dark : theme.colors.light;
-  const accent = colors.accent;
-  const { useAccent } = require('./theme');
-  
+
   const translateX = useSharedValue(0);
   const activeIndex = tabs.indexOf(active);
   const tabWidth = useSharedValue(0);
@@ -251,7 +243,6 @@ export const GlassTabBar = ({ tabs, active, onPress, scrollY }) => {
     (current, previous) => {
       if (previous === undefined) return;
       const delta = current - previous;
-      const newShrink = Math.max(0, Math.min(1, shrinkAmount.value + delta * 0.02));
       if (delta < 0 && current < previous) {
         // Scrolling up - expand
         shrinkAmount.value = withSpring(Math.max(0, shrinkAmount.value - 0.1), theme.springs.gentle);
@@ -285,7 +276,10 @@ export const GlassTabBar = ({ tabs, active, onPress, scrollY }) => {
         ]}
         onLayout={(e) => { containerWidth.value = e.nativeEvent.layout.width; }}
       >
-        <View style={styles.tabBarInner} onLayout={(e) => { tabWidth.value = e.nativeEvent.layout.width / tabs.length; }}>
+        <View style={styles.tabBarInner} onLayout={(e) => {
+          // eslint-disable-next-line react-hooks/immutability
+          tabWidth.value = e.nativeEvent.layout.width / tabs.length;
+        }}>
           <Animated.View style={[styles.activePill, activePillStyle]} />
           {tabs.map((tab, index) => (
             <Pressable
@@ -320,8 +314,8 @@ export const GlassTabBar = ({ tabs, active, onPress, scrollY }) => {
 // (Placeholder - full implementation in App.js with Reanimated)
 // ============================================
 export const Sheet = ({ visible, children, onClose }) => {
-  if (!visible) return null;
   const colorScheme = useColorScheme();
+  if (!visible) return null;
   const bg = colorScheme === 'dark' ? theme.colors.dark.elevated : theme.colors.light.elevated;
 
   return (

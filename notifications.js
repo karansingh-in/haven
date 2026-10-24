@@ -103,7 +103,7 @@ export async function scheduleWeeklyReport({ weekday, hour, minute, enabled }) {
 }
 
 // Dynamic content: reschedule wind-down/weekly with today's computed numbers in body.
-export async function refreshNotificationBodies({ todayText, backlogText, streak }) {
+export async function refreshNotificationBodies({ todayText, backlogText, streak, daysLeft }) {
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     const wind = scheduled.find((n) => n?.identifier?.startsWith("haven-winddown"));
@@ -114,7 +114,7 @@ export async function refreshNotificationBodies({ todayText, backlogText, streak
         identifier: wind.identifier,
         content: {
           title: "Wind down, Chaaru",
-          body: `${todayText} today · ${backlogText}${streak ? ` · ${streak}-day streak` : ""}. Goodnight.`,
+          body: `${todayText} today · ${backlogText}${streak ? ` · ${streak}-day streak` : ""} · ${daysLeft ?? 0} days to NEET. Goodnight.`,
           data: { kind: "winddown" },
         },
         trigger: wind.trigger,
