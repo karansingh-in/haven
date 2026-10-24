@@ -9,6 +9,7 @@ import {
     useState,
 } from "react";
 import {
+    AccessibilityInfo,
     ActivityIndicator,
     Alert,
     Animated,
@@ -939,6 +940,26 @@ function useMinuteTick() {
   return tick;
 }
 
+// Honours the OS "Reduce Motion" setting. Defined here because the 8-hour
+// celebration is the first animation that must respect it (Task 19 reuses this).
+function useReducedMotion() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => {
+        if (alive) setOn(v);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setOn);
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+  return on;
+}
+
 function MainAppLayout({ profile, coupleData, coupleId }) {
   const { scheme } = useTheme();
   const { prefs } = usePrefs();
@@ -949,9 +970,8 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [celebration, setCelebration] = useState(null);
-  // Goal-met days, persisted per couple. Loaded and written here; Task 7 reads
-  // `goldDays` for the overlay count.
-  // eslint-disable-next-line no-unused-vars
+  // Goal-met days, persisted per couple. Loaded and written here; the overlay
+  // shows the running count and Calendar/Insights read the same list.
   const [goldDays, setGoldDays] = useState([]);
   // Previous day total, so the goal celebration fires only on the crossing.
   const prevTodayRef = useRef(0);
@@ -1035,9 +1055,13 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         const raw = await AsyncStorage.getItem(goldDaysKeyFor(coupleId));
         // addGoldDay normalises: corrupt or non-array JSON loads as [].
         const days = raw ? addGoldDay(JSON.parse(raw)) : [];
-        if (!cancelled) setGoldDays(days);
+        if (cancelled) return;
+        // Merge into whatever is already in state instead of replacing it: a
+        // celebration write can land while this read is in flight, and
+        // replacing would drop the gold day it just recorded.
+        setGoldDays((current) => days.reduce((acc, key) => addGoldDay(acc, key), current));
       } catch {
-        if (!cancelled) setGoldDays([]);
+        // Keep the in-memory list rather than wiping a newer write.
       }
     })();
     return () => {
@@ -1051,10 +1075,12 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
       // Read then write inside the debounced callback, never at effect start:
       // a rapid 470 -> 480 sequence must still judge 470 as the previous total.
       const prevToday = prevTodayRef.current;
-      prevTodayRef.current = backlog.todayMinutes;
       try {
         const achievedRaw = await AsyncStorage.getItem(achievedKeyFor(coupleId));
         const achievedDate = achievedRaw || "";
+        // Only consume the previous total once the read succeeded: a transient
+        // AsyncStorage throw must not permanently skip that day's celebration.
+        prevTodayRef.current = backlog.todayMinutes;
         if (goalReached(prevToday, backlog.todayMinutes) && achievedDate !== backlog.todayKey) {
           await AsyncStorage.setItem(achievedKeyFor(coupleId), backlog.todayKey);
           setCelebration({ kind: "goal", detail: `${formatDuration(backlog.todayMinutes)} logged today.` });
@@ -1091,7 +1117,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   };
 
   const screen = () => {
-    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} />;
+    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} />;
     if (tab === "study") {
       return (
         <StudyScreen
@@ -1104,7 +1130,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
       );
     }
     if (tab === "insights") {
-      return <InsightsScreen coupleData={coupleData} coupleId={coupleId} backlog={backlog} streak={streak} />;
+      return <InsightsScreen coupleData={coupleData} coupleId={coupleId} backlog={backlog} streak={streak} goldDays={goldDays} />;
     }
     if (tab === "neet") {
       return <NeetScreen coupleId={coupleId} />;
@@ -1137,7 +1163,13 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
       </View>
 
       <SettingsSheet visible={settingsOpen} profile={profile} onClose={() => setSettingsOpen(false)} onLockNow={() => setLocked(true)} />
-      <CelebrationOverlay visible={Boolean(celebration)} kind={celebration?.kind} detail={celebration?.detail} onDismiss={() => setCelebration(null)} />
+      <CelebrationOverlay
+        visible={Boolean(celebration)}
+        kind={celebration?.kind}
+        detail={celebration?.detail}
+        goldDayCount={goldDays.length}
+        onDismiss={() => setCelebration(null)}
+      />
       <LockScreen visible={locked} timerRunning={timer.running} onUnlock={() => setLocked(false)} />
     </View>
   );
@@ -1422,26 +1454,91 @@ function ConfettiField({ colors }) {
   );
 }
 
-function CelebrationOverlay({ visible, kind, detail, onDismiss }) {
+function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0 }) {
   const { c } = useTheme();
-  const { prefs } = usePrefs();
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(0.85)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  // Keeps the entrance from replaying every parent render (the minute tick)
+  // without re-running the 3s backlog timer either.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
   useEffect(() => {
     if (!visible) return;
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
-      Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }),
-    ]).start();
+    if (reduceMotion) {
+      scale.setValue(1);
+      opacity.setValue(1);
+    } else {
+      Animated.parallel([
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
+        Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      ]).start();
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const id = setTimeout(() => onDismiss?.(), 3000);
+    // The 8-hour moment waits for the user; only the backlog card auto-dismisses.
+    if (kind === "goal") return undefined;
+    const id = setTimeout(() => dismissRef.current?.(), 3000);
     return () => clearTimeout(id);
-  }, [visible, scale, opacity, onDismiss]);
+  }, [visible, kind, reduceMotion, scale, opacity]);
   if (!visible) return null;
-  const name = prefs.displayName?.trim() || "Chaaru";
-  const title = kind === "goal" ? "Eight hours, done." : "Backlog melting.";
-  const sub = kind === "goal" ? `${name}, you kept your promise today.` : detail || "Extra hours burned it down.";
+
+  if (kind === "goal") {
+    return (
+      <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
+        <Pressable
+          style={[styles.goalStage, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          onPress={onDismiss}
+        >
+          <LinearGradient
+            colors={["rgba(10,132,255,0.22)", "transparent", "rgba(90,200,168,0.16)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          {reduceMotion ? null : (
+            <View pointerEvents="none" style={styles.goalConfetti}>
+              <ConfettiField colors={[c.tint, "#FFFFFF", c.gold, c.mint, c.rose]} />
+            </View>
+          )}
+          <Animated.View style={[styles.goalContent, { opacity, transform: [{ scale }] }]}>
+            <View style={styles.goalCentre}>
+              <Ring
+                size={280}
+                stroke={20}
+                progress={1}
+                trackColor="rgba(255,255,255,0.10)"
+                fillColor={c.tint}
+              >
+                <Text style={styles.goalRingFigure}>8h</Text>
+                <Text style={styles.goalRingLabel}>of 8h</Text>
+              </Ring>
+              <Text style={styles.goalTitle}>Eight hours.</Text>
+              <Text style={styles.goalSub}>{detail || "The whole day, kept."}</Text>
+              {goldDayCount > 0 ? (
+                <View style={styles.goalGoldPill}>
+                  <Sparkles size={12} color={c.gold} />
+                  <Text style={styles.goalGoldPillText}>Gold day #{goldDayCount}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.goalFooter}>
+              <Pressable
+                onPress={onDismiss}
+                style={({ pressed }) => [styles.goalButton, pressed && { opacity: 0.88, transform: [{ scale: 0.985 }] }]}
+              >
+                <Text style={styles.goalButtonText}>Keep going</Text>
+              </Pressable>
+              <Text style={styles.goalHint}>Tap anywhere to continue</Text>
+            </View>
+          </Animated.View>
+        </Pressable>
+      </Modal>
+    );
+  }
+
+  const sub = detail || "Extra hours burned it down.";
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
       <Pressable style={styles.celebrateBackdrop} onPress={onDismiss}>
@@ -1451,7 +1548,7 @@ function CelebrationOverlay({ visible, kind, detail, onDismiss }) {
           <View style={styles.celebrateBadge}>
             <Award size={26} color="#FFFFFF" />
           </View>
-          <Text style={styles.celebrateTitle}>{title}</Text>
+          <Text style={styles.celebrateTitle}>Backlog melting.</Text>
           <Text style={styles.celebrateSub}>{sub}</Text>
           <View style={styles.celebratePill}>
             <Sparkles size={13} color={c.tint} />
@@ -1744,7 +1841,7 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
 // CALENDAR
 // ============================================================
 
-function CalendarScreen({ coupleData, coupleId }) {
+function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
   const { c } = useTheme();
   const styles = useStyles();
   const periods = normalizePeriods(coupleData.periods);
@@ -1752,6 +1849,8 @@ function CalendarScreen({ coupleData, coupleId }) {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
+
+  const goldSet = useMemo(() => new Set(goldDays.filter(Boolean)), [goldDays]);
 
   const calendarDays = useMemo(() => {
     const year = displayDate.getFullYear();
@@ -1867,6 +1966,7 @@ function CalendarScreen({ coupleData, coupleId }) {
                       >
                         {date.getDate()}
                       </Text>
+                      {goldSet.has(dateKey) ? <View style={[styles.goldDot, { backgroundColor: c.gold }]} /> : null}
                     </View>
                   </Pressable>
                 );
@@ -2210,10 +2310,15 @@ function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
 // INSIGHTS
 // ============================================================
 
-function InsightsScreen({ coupleData, coupleId, backlog, streak }) {
+function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }) {
   const { c } = useTheme();
   const styles = useStyles();
   const [testOpen, setTestOpen] = useState(false);
+
+  const goldMonthCount = useMemo(() => {
+    const prefix = dayKeyFor().slice(0, 7);
+    return goldDays.filter((key) => typeof key === "string" && key.startsWith(prefix)).length;
+  }, [goldDays]);
 
   const periods = normalizePeriods(coupleData.periods);
   const cycleStats = calculateCycleStats(periods);
@@ -2292,6 +2397,9 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak }) {
             <Text style={[styles.streakPillText, { color: c.gold }]}>{streak ?? 0} day streak</Text>
           </View>
         </View>
+        <Text style={styles.goldLine}>
+          {goldDays.length} gold days · {goldMonthCount} this month
+        </Text>
       </Rise>
 
       <Rise delay={70}>
@@ -3275,6 +3383,7 @@ const makeStyles = (c) =>
     // HEADERS
     homeHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 12 },
     pageHeader: { flexDirection: "row", alignItems: "center", marginBottom: 18, gap: 10 },
+    goldLine: { marginTop: -8, marginBottom: 16, fontSize: 13, lineHeight: 19, fontFamily: BODY_MED, color: c.label2, ...TEXT_FIX },
     eyebrow: {
       fontSize: 11,
       lineHeight: 15,
@@ -3584,6 +3693,7 @@ const makeStyles = (c) =>
     day: { width: `${100 / 7}%`, height: 46, alignItems: "center", justifyContent: "center" },
     dayInner: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
     dayText: { fontSize: 14, lineHeight: 20, color: c.label, fontFamily: BODY_MED, fontVariant: ["tabular-nums"], ...TEXT_FIX },
+    goldDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: 2 },
     legend: { flexDirection: "row", gap: 20, marginTop: 14, paddingTop: 14, borderTopWidth: HAIRLINE, borderTopColor: c.separator },
     legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
     legendDot: { width: 7, height: 7, borderRadius: 4 },
@@ -3756,6 +3866,31 @@ const makeStyles = (c) =>
     celebrateSub: { marginTop: 8, fontSize: 14, lineHeight: 21, color: c.label2, textAlign: "center", paddingHorizontal: 24, fontFamily: BODY, ...TEXT_FIX },
     celebratePill: { marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999, backgroundColor: c.tintSoft },
     celebratePillText: { fontSize: 12, lineHeight: 17, fontFamily: BODY_SEMI, color: c.tint, ...TEXT_FIX },
+
+    // 8-HOUR MOMENT — fixed navy in both schemes: it is a moment, not a screen.
+    goalStage: { flex: 1, backgroundColor: "#0B1220", overflow: "hidden" },
+    goalConfetti: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center", opacity: 0.7 },
+    goalContent: { flex: 1, width: "100%", paddingHorizontal: 24, paddingTop: 40, paddingBottom: 18, justifyContent: "space-between" },
+    goalCentre: { flex: 1, alignItems: "center", justifyContent: "center" },
+    goalRingFigure: { fontSize: 64, lineHeight: 72, fontFamily: DISPLAY, color: "#FFFFFF", fontVariant: ["tabular-nums"], ...TEXT_FIX },
+    goalRingLabel: { marginTop: 4, fontSize: 13, lineHeight: 18, fontFamily: BODY_MED, color: "#FFFFFF", opacity: 0.55, ...TEXT_FIX },
+    goalTitle: { marginTop: 28, fontSize: 36, lineHeight: 43, fontFamily: DISPLAY_ITALIC, color: "#FFFFFF", textAlign: "center", ...TEXT_FIX },
+    goalSub: { marginTop: 8, fontSize: 15, lineHeight: 22, fontFamily: BODY, color: "#FFFFFF", opacity: 0.62, textAlign: "center", paddingHorizontal: 12, ...TEXT_FIX },
+    goalGoldPill: {
+      marginTop: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.10)",
+    },
+    goalGoldPillText: { fontSize: 12, lineHeight: 17, fontFamily: BODY_SEMI, color: c.gold, ...TEXT_FIX },
+    goalFooter: { width: "100%", alignItems: "center" },
+    goalButton: { alignSelf: "stretch", height: 52, borderRadius: 16, backgroundColor: c.tint, alignItems: "center", justifyContent: "center" },
+    goalButtonText: { fontSize: 16, lineHeight: 22, fontFamily: BODY_BOLD, color: "#FFFFFF", letterSpacing: 0.2, ...TEXT_FIX },
+    goalHint: { marginTop: 14, fontSize: 12, lineHeight: 17, fontFamily: BODY_MED, color: "#FFFFFF", opacity: 0.45, ...TEXT_FIX },
 
     // LOCK
     lockBackdrop: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
