@@ -12,7 +12,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build:web": "expo export -p web",
-    "package": "npm run build:web && electron-builder"
+    "package": "npm run build:web && electron-builder",
+    "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
