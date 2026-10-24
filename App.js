@@ -1002,7 +1002,9 @@ function Split({ left, right, gap = 20 }) {
   const { isWide } = useLayout();
   const column = isWide ? { flex: 1, minWidth: 0 } : null;
   return (
-    <View style={{ flexDirection: isWide ? "row" : "column", gap }}>
+    // No gap when stacked: the cards' own margins already set phone spacing,
+    // and an inserted gap would shift the phone layout by that amount.
+    <View style={{ flexDirection: isWide ? "row" : "column", gap: isWide ? gap : 0 }}>
       <View style={column}>{left}</View>
       <View style={column}>{right}</View>
     </View>
@@ -1406,10 +1408,12 @@ function Card({ children, style, onPress }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-function SectionHeader({ title, trailing }) {
+// `flush` drops the 24pt top margin for a header that opens a wide column,
+// so both columns start on the same line.
+function SectionHeader({ title, trailing, flush }) {
   const styles = useStyles();
   return (
-    <View style={styles.sectionHeader}>
+    <View style={[styles.sectionHeader, flush && { marginTop: 0 }]}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {trailing}
     </View>
@@ -1843,6 +1847,7 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
   const { c } = useTheme();
   const { prefs } = usePrefs();
   const styles = useStyles();
+  const { isWide } = useLayout();
   const name = prefs.displayName?.trim() || "Chaaru";
   const affirmation = prefs.affirmation?.trim() || DEFAULT_PREFS.affirmation;
   const today = getTodayKey();
@@ -1862,115 +1867,125 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
 
   return (
     <ScreenScroll>
-      <Rise>
-        <View style={styles.homeHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>{formatReadableDate(today).toUpperCase()}</Text>
-            <Text style={styles.heroGreeting} numberOfLines={2}>
-              Good {getGreeting()},{"\n"}
-              <Text style={styles.heroGreetingItalic}>{name}.</Text>
-            </Text>
-            <Text style={styles.affirmation}>{affirmation}</Text>
-          </View>
-          <Pressable onPress={onOpenSettings} hitSlop={8} style={({ pressed }) => pressed && { opacity: 0.6 }}>
-            <LinearGradient colors={c.tintGradient} style={styles.avatar}>
-              <Settings2 size={19} color="#FFFFFF" strokeWidth={2.2} />
-            </LinearGradient>
-          </Pressable>
-        </View>
-      </Rise>
-
-      <Rise delay={80}>
-        <Pressable
-          onPress={() => onNavigate("study")}
-          style={({ pressed }) => [styles.heroCard, pressed && { transform: [{ scale: 0.99 }], opacity: 0.96 }]}
-        >
-          <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCardInner}>
-            <View style={styles.heroGlow} />
-            <View style={styles.heroRow}>
-              <Ring size={128} stroke={13} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
-                <View style={{ alignItems: "center" }}>
-                  <Text style={styles.heroRingValue}>{formatHoursShort(todayMinutes)}h</Text>
-                  <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of 8h`}</Text>
+      <Split
+        gap={24}
+        left={
+          <>
+            <Rise>
+              <View style={styles.homeHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eyebrow}>{formatReadableDate(today).toUpperCase()}</Text>
+                  <Text style={styles.heroGreeting} numberOfLines={2}>
+                    Good {getGreeting()},{"\n"}
+                    <Text style={styles.heroGreetingItalic}>{name}.</Text>
+                  </Text>
+                  <Text style={styles.affirmation}>{affirmation}</Text>
                 </View>
-              </Ring>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.heroKicker}>{goalDone ? "GOLD DAY" : "TODAY'S FOCUS"}</Text>
-                <Text style={styles.heroLine}>
-                  {goalDone ? "Eight hours, protected." : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to 8 hours.`}
-                </Text>
-                <View style={styles.heroMetaRow}>
-                  <View style={styles.heroPill}>
-                    <Flame size={12} color="#FFFFFF" />
-                    <Text style={styles.heroPillText}>{streak ?? 0} day streak</Text>
+                <Pressable onPress={onOpenSettings} hitSlop={8} style={({ pressed }) => pressed && { opacity: 0.6 }}>
+                  <LinearGradient colors={c.tintGradient} style={styles.avatar}>
+                    <Settings2 size={19} color="#FFFFFF" strokeWidth={2.2} />
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </Rise>
+
+            <Rise delay={80}>
+              <Pressable
+                onPress={() => onNavigate("study")}
+                style={({ pressed }) => [styles.heroCard, pressed && { transform: [{ scale: 0.99 }], opacity: 0.96 }]}
+              >
+                <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCardInner}>
+                  <View style={styles.heroGlow} />
+                  <View style={styles.heroRow}>
+                    <Ring size={128} stroke={13} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
+                      <View style={{ alignItems: "center" }}>
+                        <Text style={styles.heroRingValue}>{formatHoursShort(todayMinutes)}h</Text>
+                        <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of 8h`}</Text>
+                      </View>
+                    </Ring>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.heroKicker}>{goalDone ? "GOLD DAY" : "TODAY'S FOCUS"}</Text>
+                      <Text style={styles.heroLine}>
+                        {goalDone ? "Eight hours, protected." : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to 8 hours.`}
+                      </Text>
+                      <View style={styles.heroMetaRow}>
+                        <View style={styles.heroPill}>
+                          <Flame size={12} color="#FFFFFF" />
+                          <Text style={styles.heroPillText}>{streak ?? 0} day streak</Text>
+                        </View>
+                        <View style={styles.heroPill}>
+                          <Hourglass size={12} color="#FFFFFF" />
+                          <Text style={styles.heroPillText}>{backlogMinutes === 0 ? "Backlog clear" : formatBacklog(backlogMinutes)}</Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.heroPill}>
-                    <Hourglass size={12} color="#FFFFFF" />
-                    <Text style={styles.heroPillText}>{backlogMinutes === 0 ? "Backlog clear" : formatBacklog(backlogMinutes)}</Text>
+                </LinearGradient>
+              </Pressable>
+            </Rise>
+          </>
+        }
+        right={
+          <>
+            <Rise delay={140}>
+              <SectionHeader flush={isWide} title="At a glance" trailing={<Text style={styles.sectionDate}>{todayLogs.length} session{todayLogs.length === 1 ? "" : "s"}</Text>} />
+              <View style={styles.trioRow}>
+                <Card style={styles.trioMain} onPress={() => onNavigate("study")}>
+                  <View style={[styles.glyph, { backgroundColor: c.tintSoft }]}>
+                    <Timer size={18} color={c.tint} />
                   </View>
+                  <Text style={styles.trioValue}>{formatDuration(todayMinutes)}</Text>
+                  <Text style={styles.trioLabel}>Studied today</Text>
+                  <Text style={styles.trioLink}>{timer.running ? "Timer running — open" : "Open timer"}</Text>
+                </Card>
+                <View style={styles.trioCol}>
+                  <Card style={styles.trioSmall}>
+                    <Flame size={18} color={c.gold} />
+                    <Text style={styles.trioValueSmall}>{streak ?? 0}<Text style={styles.trioUnit}> days</Text></Text>
+                    <Text style={styles.trioLabel}>Streak</Text>
+                  </Card>
+                  <Card style={styles.trioSmall}>
+                    <Hourglass size={18} color={backlogMinutes === 0 ? c.mint : c.gold} />
+                    <Text style={styles.trioValueSmall}>{backlogMinutes === 0 ? "Clear" : `${formatHoursShort(backlogMinutes)}h`}</Text>
+                    <Text style={styles.trioLabel}>Backlog</Text>
+                  </Card>
                 </View>
               </View>
-            </View>
-          </LinearGradient>
-        </Pressable>
-      </Rise>
+            </Rise>
 
-      <Rise delay={140}>
-        <SectionHeader title="At a glance" trailing={<Text style={styles.sectionDate}>{todayLogs.length} session{todayLogs.length === 1 ? "" : "s"}</Text>} />
-        <View style={styles.trioRow}>
-          <Card style={styles.trioMain} onPress={() => onNavigate("study")}>
-            <View style={[styles.glyph, { backgroundColor: c.tintSoft }]}>
-              <Timer size={18} color={c.tint} />
-            </View>
-            <Text style={styles.trioValue}>{formatDuration(todayMinutes)}</Text>
-            <Text style={styles.trioLabel}>Studied today</Text>
-            <Text style={styles.trioLink}>{timer.running ? "Timer running — open" : "Open timer"}</Text>
-          </Card>
-          <View style={styles.trioCol}>
-            <Card style={styles.trioSmall}>
-              <Flame size={18} color={c.gold} />
-              <Text style={styles.trioValueSmall}>{streak ?? 0}<Text style={styles.trioUnit}> days</Text></Text>
-              <Text style={styles.trioLabel}>Streak</Text>
-            </Card>
-            <Card style={styles.trioSmall}>
-              <Hourglass size={18} color={backlogMinutes === 0 ? c.mint : c.gold} />
-              <Text style={styles.trioValueSmall}>{backlogMinutes === 0 ? "Clear" : `${formatHoursShort(backlogMinutes)}h`}</Text>
-              <Text style={styles.trioLabel}>Backlog</Text>
-            </Card>
-          </View>
-        </View>
-      </Rise>
+            {timer.active ? (
+              <Rise delay={190}>
+                <Card style={styles.liveTimer} onPress={() => onNavigate("study")}>
+                  <View style={[styles.liveDot, { backgroundColor: timer.running ? c.mint : c.gold }]} />
+                  <Text style={styles.liveTimerText}>{timer.running ? "Timer running" : "Timer paused"}</Text>
+                  <Text style={styles.liveTimerClock}>{formatClock(timer.elapsedMs)}</Text>
+                </Card>
+              </Rise>
+            ) : null}
 
-      {timer.active ? (
-        <Rise delay={190}>
-          <Card style={styles.liveTimer} onPress={() => onNavigate("study")}>
-            <View style={[styles.liveDot, { backgroundColor: timer.running ? c.mint : c.gold }]} />
-            <Text style={styles.liveTimerText}>{timer.running ? "Timer running" : "Timer paused"}</Text>
-            <Text style={styles.liveTimerClock}>{formatClock(timer.elapsedMs)}</Text>
-          </Card>
-        </Rise>
-      ) : null}
-
-      <Rise delay={220}>
-        <SectionHeader title="Cycle" trailing={<Pressable onPress={() => onNavigate("calendar")} hitSlop={8}><Text style={styles.link}>Open calendar</Text></Pressable>} />
-        <Card style={styles.cycleCard} onPress={() => onNavigate("calendar")}>
-          <View style={styles.cycleMain}>
-            <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
-              <Heart size={23} color={c.rose} fill={c.rose} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cycleLabel}>{cycleDay ? `Cycle day ${cycleDay}` : "Cycle not started"}</Text>
-              <Text style={styles.cycleSubtext}>
-                {latestPeriod ? `Started ${formatReadableDate(latestPeriod.startDate)}` : "Log your first period to begin."}
-              </Text>
-            </View>
-            <View style={styles.cycleAvg}>
-              <Text style={styles.cycleAvgValue}>{cycleStats.average ? `${cycleStats.average}d` : "—"}</Text>
-              <Text style={styles.cycleAvgLabel}>AVG</Text>
-            </View>
-          </View>
-        </Card>
-      </Rise>
+            <Rise delay={220}>
+              <SectionHeader title="Cycle" trailing={<Pressable onPress={() => onNavigate("calendar")} hitSlop={8}><Text style={styles.link}>Open calendar</Text></Pressable>} />
+              <Card style={styles.cycleCard} onPress={() => onNavigate("calendar")}>
+                <View style={styles.cycleMain}>
+                  <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
+                    <Heart size={23} color={c.rose} fill={c.rose} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cycleLabel}>{cycleDay ? `Cycle day ${cycleDay}` : "Cycle not started"}</Text>
+                    <Text style={styles.cycleSubtext}>
+                      {latestPeriod ? `Started ${formatReadableDate(latestPeriod.startDate)}` : "Log your first period to begin."}
+                    </Text>
+                  </View>
+                  <View style={styles.cycleAvg}>
+                    <Text style={styles.cycleAvgValue}>{cycleStats.average ? `${cycleStats.average}d` : "—"}</Text>
+                    <Text style={styles.cycleAvgLabel}>AVG</Text>
+                  </View>
+                </View>
+              </Card>
+            </Rise>
+          </>
+        }
+      />
     </ScreenScroll>
   );
 }
@@ -1982,6 +1997,12 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
 function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
   const { c } = useTheme();
   const styles = useStyles();
+  const { isWide } = useLayout();
+  // Seven columns across an iPad card would be ~145pt each, so the grid caps
+  // at 720pt and stays centred; the day cells grow to suit the larger measure.
+  const gridWidth = isWide ? { width: "100%", maxWidth: 720, alignSelf: "center" } : null;
+  const daySize = isWide ? { height: 56 } : null;
+  const dayInnerSize = isWide ? { width: 42, height: 42, borderRadius: 21 } : null;
   const periods = normalizePeriods(coupleData.periods);
   const [displayDate, setDisplayDate] = useState(() => parseDateKey(dayKeyFor()));
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
@@ -2072,14 +2093,14 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                 <ChevronRight size={20} color={c.tint} />
               </Pressable>
             </View>
-            <View style={styles.weekRow}>
+            <View style={[styles.weekRow, gridWidth]}>
               {DAYS.map((day, index) => (
                 <Text key={`${day}-${index}`} style={styles.weekDay}>{day}</Text>
               ))}
             </View>
-            <View style={styles.calendarGrid}>
+            <View style={[styles.calendarGrid, gridWidth]}>
               {calendarDays.map((dateKey, index) => {
-                if (!dateKey) return <View key={`empty-${index}`} style={styles.day} />;
+                if (!dateKey) return <View key={`empty-${index}`} style={[styles.day, daySize]} />;
                 const date = parseDateKey(dateKey);
                 const isSelected = dateKey === selectedDate;
                 const isToday = dateKey === getTodayKey();
@@ -2087,13 +2108,13 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                 return (
                   <Pressable
                     key={dateKey}
-                    style={styles.day}
+                    style={[styles.day, daySize]}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
                       setSelectedDate(dateKey);
                     }}
                   >
-                    <View style={[styles.dayInner, isPeriod && { backgroundColor: c.roseSoft }, isSelected && { backgroundColor: c.tint }]}>
+                    <View style={[styles.dayInner, dayInnerSize, isPeriod && { backgroundColor: c.roseSoft }, isSelected && { backgroundColor: c.tint }]}>
                       <Text
                         style={[
                           styles.dayText,
@@ -2182,6 +2203,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
 function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   const { c } = useTheme();
   const styles = useStyles();
+  const { isWide } = useLayout();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [prefill, setPrefill] = useState(null);
 
@@ -2256,91 +2278,101 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   return (
     <>
       <ScreenScroll extraBottom={56}>
-        <Rise>
-          <View style={styles.pageHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>FOCUS</Text>
-              <Text style={styles.pageTitle}>Study</Text>
-            </View>
-            <View style={[styles.streakPill, { backgroundColor: c.goldSoft }]}>
-              <Flame size={14} color={c.gold} />
-              <Text style={[styles.streakPillText, { color: c.gold }]}>{streak ?? 0} day streak</Text>
-            </View>
-          </View>
-        </Rise>
-
-        <Rise delay={70}>
-          <TimerCard timer={timer} todayMinutes={todayMinutes} onFinish={finishTimer} onDiscard={discardTimer} />
-        </Rise>
-
-        <Rise delay={120}>
-          <View style={[styles.backlogBanner, { backgroundColor: backlogMinutes === 0 ? c.mintSoft : c.goldSoft }]}>
-            <Hourglass size={18} color={backlogMinutes === 0 ? c.mint : c.gold} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.backlogTitle}>{backlogMinutes === 0 ? "Backlog clear — beautiful." : `${formatBacklog(backlogMinutes)} to catch up`}</Text>
-              <Text style={styles.backlogSub}>{status} · extra hours erase it</Text>
-            </View>
-            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-          </View>
-        </Rise>
-
-        <Rise delay={160}>
-          <SectionHeader title="Today" trailing={<Text style={styles.sectionDate}>Goal {formatHoursShort(DAILY_GOAL_MINUTES)} h</Text>} />
-          <Card style={styles.todayCard}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-              <Ring size={104} stroke={11} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor={c.fill} fillColor={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : c.tint}>
-                <View style={{ alignItems: "center" }}>
-                  <Text style={styles.ringValue}>{formatHoursShort(todayMinutes)}h</Text>
-                  <Text style={styles.ringCaption}>{pct}%</Text>
-                </View>
-              </Ring>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.todayValue}>{formatDuration(todayMinutes)}</Text>
-                <Text style={styles.todayGoal}>{pct}% of today's goal</Text>
-                <Text style={[styles.todayGoal, { marginTop: 4, color: statusColor, fontFamily: BODY_SEMI }]}>
-                  {todayMinutes >= DAILY_GOAL_MINUTES ? "Surplus burns backlog" : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to reach 8h`}
-                </Text>
-              </View>
-            </View>
-            <View style={{ marginTop: 14 }}>
-              <Progress value={todayMinutes / DAILY_GOAL_MINUTES} color={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : undefined} />
-            </View>
-          </Card>
-        </Rise>
-
-        <SectionHeader title="Recent sessions" />
-        {logs.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <View style={[styles.glyphLarge, { backgroundColor: c.tintSoft }]}>
-              <Timer size={22} color={c.tint} />
-            </View>
-            <Text style={styles.emptyCardTitle}>No sessions yet</Text>
-            <Text style={styles.emptyCardBody}>Start the timer, or log something you've already done.</Text>
-          </Card>
-        ) : (
-          <Card>
-            {logs.slice(0, 15).map((log, index) => (
-              <View key={`${log.timestamp}-${index}`}>
-                {index > 0 ? <View style={styles.separatorInset} /> : null}
-                <View style={styles.row}>
-                  <View style={[styles.glyph, { backgroundColor: c.tintSoft }]}>
-                    <Timer size={17} color={c.tint} />
-                  </View>
+        <Split
+          gap={24}
+          left={
+            <>
+              <Rise>
+                <View style={styles.pageHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.rowTitle} numberOfLines={1}>{log.subject || "Study session"}</Text>
-                    <Text style={styles.rowMeta} numberOfLines={1}>
-                      {formatRelativeDate(log.date)} · {formatDuration(log.duration)}
-                      {log.notes ? ` · ${log.notes}` : ""}
-                    </Text>
+                    <Text style={styles.eyebrow}>FOCUS</Text>
+                    <Text style={styles.pageTitle}>Study</Text>
                   </View>
-                  <Pressable onPress={() => removeLog(log)} hitSlop={10} style={styles.deleteButton}>
-                    <Trash2 size={17} color={c.label3} />
-                  </Pressable>
+                  <View style={[styles.streakPill, { backgroundColor: c.goldSoft }]}>
+                    <Flame size={14} color={c.gold} />
+                    <Text style={[styles.streakPillText, { color: c.gold }]}>{streak ?? 0} day streak</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </Card>
-        )}
+              </Rise>
+
+              <Rise delay={70}>
+                <TimerCard timer={timer} todayMinutes={todayMinutes} onFinish={finishTimer} onDiscard={discardTimer} />
+              </Rise>
+
+              <Rise delay={120}>
+                <View style={[styles.backlogBanner, { backgroundColor: backlogMinutes === 0 ? c.mintSoft : c.goldSoft }]}>
+                  <Hourglass size={18} color={backlogMinutes === 0 ? c.mint : c.gold} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.backlogTitle}>{backlogMinutes === 0 ? "Backlog clear — beautiful." : `${formatBacklog(backlogMinutes)} to catch up`}</Text>
+                    <Text style={styles.backlogSub}>{status} · extra hours erase it</Text>
+                  </View>
+                  <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                </View>
+              </Rise>
+            </>
+          }
+          right={
+            <>
+              <Rise delay={160}>
+                <SectionHeader flush={isWide} title="Today" trailing={<Text style={styles.sectionDate}>Goal {formatHoursShort(DAILY_GOAL_MINUTES)} h</Text>} />
+                <Card style={styles.todayCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                    <Ring size={104} stroke={11} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor={c.fill} fillColor={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : c.tint}>
+                      <View style={{ alignItems: "center" }}>
+                        <Text style={styles.ringValue}>{formatHoursShort(todayMinutes)}h</Text>
+                        <Text style={styles.ringCaption}>{pct}%</Text>
+                      </View>
+                    </Ring>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.todayValue}>{formatDuration(todayMinutes)}</Text>
+                      <Text style={styles.todayGoal}>{pct}% of today's goal</Text>
+                      <Text style={[styles.todayGoal, { marginTop: 4, color: statusColor, fontFamily: BODY_SEMI }]}>
+                        {todayMinutes >= DAILY_GOAL_MINUTES ? "Surplus burns backlog" : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to reach 8h`}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 14 }}>
+                    <Progress value={todayMinutes / DAILY_GOAL_MINUTES} color={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : undefined} />
+                  </View>
+                </Card>
+              </Rise>
+
+              <SectionHeader title="Recent sessions" />
+              {logs.length === 0 ? (
+                <Card style={styles.emptyCard}>
+                  <View style={[styles.glyphLarge, { backgroundColor: c.tintSoft }]}>
+                    <Timer size={22} color={c.tint} />
+                  </View>
+                  <Text style={styles.emptyCardTitle}>No sessions yet</Text>
+                  <Text style={styles.emptyCardBody}>Start the timer, or log something you've already done.</Text>
+                </Card>
+              ) : (
+                <Card>
+                  {logs.slice(0, 15).map((log, index) => (
+                    <View key={`${log.timestamp}-${index}`}>
+                      {index > 0 ? <View style={styles.separatorInset} /> : null}
+                      <View style={styles.row}>
+                        <View style={[styles.glyph, { backgroundColor: c.tintSoft }]}>
+                          <Timer size={17} color={c.tint} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.rowTitle} numberOfLines={1}>{log.subject || "Study session"}</Text>
+                          <Text style={styles.rowMeta} numberOfLines={1}>
+                            {formatRelativeDate(log.date)} · {formatDuration(log.duration)}
+                            {log.notes ? ` · ${log.notes}` : ""}
+                          </Text>
+                        </View>
+                        <Pressable onPress={() => removeLog(log)} hitSlop={10} style={styles.deleteButton}>
+                          <Trash2 size={17} color={c.label3} />
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </Card>
+              )}
+            </>
+          }
+        />
       </ScreenScroll>
 
       <Fab label="Log session" onPress={openBlank} />
@@ -2695,6 +2727,7 @@ const NEET_SUBJECTS = ["Physics", "Chemistry", "Botany", "Zoology"];
 function NeetScreen({ coupleId }) {
   const { c } = useTheme();
   const styles = useStyles();
+  const { isWide } = useLayout();
 
   // --- live countdown ---
   const [now, setNow] = useState(() => Date.now());
@@ -2795,165 +2828,176 @@ function NeetScreen({ coupleId }) {
 
   return (
     <ScreenScroll>
-      <Rise>
-        <View style={styles.pageHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>NEET UG {new Date(examAt).getFullYear()}</Text>
-            <Text style={styles.pageTitle}>NEET</Text>
-          </View>
-          <View style={[styles.streakPill, { backgroundColor: c.tintSoft }]}>
-            <Target size={14} color={c.tint} />
-            <Text style={[styles.streakPillText, { color: c.tint }]}>{daysLeft} days</Text>
-          </View>
-        </View>
-      </Rise>
-
-      {/* 1 — countdown + competition */}
-      <Rise delay={70}>
-        <Card style={styles.neetHero} padding={0}>
-          <Text style={styles.neetHeroLabel}>Days to exam · {formatShortDateFromISO(NEET_EXAM_DATE)}</Text>
-          <Text style={styles.neetDays}>
-            {daysLeft}
-            <Text style={styles.neetDaysUnit}> days</Text>
-          </Text>
-          <Text style={styles.neetClock}>
-            {pad(hoursLeft)}:{pad(minutesLeft)}:{pad(secondsLeft)} until NEET opens
-          </Text>
-          <View style={styles.separatorInset} />
-          <View style={styles.neetStatRow}>
-            <View style={styles.neetStatCell}>
-              <Text style={styles.neetStatNum}>24.2L</Text>
-              <Text style={styles.neetStatLabel}>aspirants</Text>
-            </View>
-            <View style={styles.neetStatCell}>
-              <Text style={styles.neetStatNum}>1.1L</Text>
-              <Text style={styles.neetStatLabel}>MBBS seats</Text>
-            </View>
-            <View style={styles.neetStatCell}>
-              <Text style={styles.neetStatNum}>1 in 22</Text>
-              <Text style={styles.neetStatLabel}>get in</Text>
-            </View>
-          </View>
-          <View style={styles.separatorInset} />
-          <Text style={styles.neetFootnote}>
-            Last year Gen cutoff: 715/720
-            {latestGap !== null ? (
-              latestGap >= 0 ? (
-                <Text style={{ color: c.mint, fontFamily: BODY_SEMI }}> · you're +{latestGap} above it</Text>
-              ) : (
-                <Text style={{ color: c.gold, fontFamily: BODY_SEMI }}> · you're {Math.abs(latestGap)} short</Text>
-              )
-            ) : null}
-          </Text>
-        </Card>
-      </Rise>
-
-      {/* 2 — mock predictor */}
-      <SectionHeader title="Mock predictor" />
-      <Card style={{ padding: 20 }}>
-        <Text style={styles.neetFootnote}>Log a mock to see percentile, AIR range and where you stand against last year's cutoff.</Text>
-        <View style={styles.neetFieldRow}>
-          <TextInput
-            value={scoreText}
-            onChangeText={setScoreText}
-            placeholder="Score out of 720"
-            placeholderTextColor={c.label3}
-            keyboardType="number-pad"
-            style={styles.neetScoreInput}
-            maxLength={3}
-          />
-          <Pressable style={[styles.neetLogBtn, { backgroundColor: c.tint }]} onPress={logMock}>
-            <Text style={styles.neetLogBtnText}>Log mock</Text>
-          </Pressable>
-        </View>
-        <Segmented options={NEET_CATEGORIES} value={category} onChange={setCategory} />
-
-        {mockResult ? (
-          <View style={[styles.neetResult, { backgroundColor: c.tintSoft }]}>
-            <Text style={styles.neetResultTop}>
-              {mockResult.percentileLabel}%ile · AIR ~{mockResult.air.toLocaleString("en-IN")}
-            </Text>
-            <Text style={[styles.neetResultGap, { color: mockResult.isAboveCutoff ? c.mint : c.gold }]}>
-              {mockResult.isAboveCutoff ? `+${mockResult.cutoffGap} above` : `${Math.abs(mockResult.cutoffGap)} below`} {mockResult.category} cutoff ({mockResult.cutoff})
-            </Text>
-          </View>
-        ) : null}
-
-        {mocks.length ? (
-          <View style={{ marginTop: 12 }}>
-            {mocks.slice(0, 6).map((m) => (
-              <Pressable
-                key={m.id}
-                onPress={() => removeMock(m)}
-                style={({ pressed }) => [styles.neetMockRow, pressed && { opacity: 0.6 }]}
-              >
-                <Text style={styles.neetMockName} numberOfLines={1}>
-                  {m.name} · {m.category}
-                </Text>
-                <Text style={styles.neetMockMeta}>
-                  {m.percentileLabel}%ile · {m.cutoffGap >= 0 ? `+${m.cutoffGap}` : m.cutoffGap} vs cutoff
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-      </Card>
-
-      {/* 3 — syllabus checklist */}
-      <SectionHeader
-        title="Syllabus"
-        trailing={<Text style={styles.neetProgress}>{syllabusState.percent}% covered</Text>}
-      />
-      <Card style={{ padding: 20 }}>
-        <Segmented
-          options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
-          value={openSubject}
-          onChange={setOpenSubject}
-        />
-        <View style={{ marginTop: 8 }}>
-          {subjectChapters.map((ch) => {
-            const done = Boolean(syllabusState.checks[ch.id]);
-            const wColor = ch.weightage === "High" ? c.mint : ch.weightage === "Medium" ? c.gold : c.label3;
-            return (
-              <Pressable
-                key={ch.id}
-                onPress={() => toggleChapter(ch.id)}
-                style={({ pressed }) => [styles.neetChapterRow, pressed && { opacity: 0.6 }]}
-              >
-                <View style={[styles.neetCheck, done && { backgroundColor: c.tint, borderColor: c.tint }]}>
-                  {done ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
+      <Split
+        gap={24}
+        left={
+          <>
+            <Rise>
+              <View style={styles.pageHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eyebrow}>NEET UG {new Date(examAt).getFullYear()}</Text>
+                  <Text style={styles.pageTitle}>NEET</Text>
                 </View>
-                <Text style={[styles.neetChapterName, done && { color: c.label3, textDecorationLine: "line-through" }]} numberOfLines={1}>
-                  {ch.chapter}
-                </Text>
-                <View style={[styles.neetWeight, { backgroundColor: c.fill }]}>
-                  <Text style={[styles.neetWeightText, { color: wColor }]}>{ch.weightage}</Text>
+                <View style={[styles.streakPill, { backgroundColor: c.tintSoft }]}>
+                  <Target size={14} color={c.tint} />
+                  <Text style={[styles.streakPillText, { color: c.tint }]}>{daysLeft} days</Text>
                 </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Card>
-
-      {/* 4 — community links */}
-      <SectionHeader title="Community" />
-      <Card style={{ padding: 20 }}>
-        {SUBREDDITS.map((sub, i) => (
-          <Pressable
-            key={sub.name}
-            onPress={() => Linking.openURL(sub.url).catch(() => {})}
-            style={({ pressed }) => [styles.neetSubRow, i === 0 && { paddingTop: 0 }, pressed && { opacity: 0.6 }]}
-          >
-            <View style={styles.neetSubHead}>
-              <View style={[styles.neetSubBadge, { backgroundColor: c.fill }]}>
-                <Text style={[styles.neetSubBadgeText, { color: c.label2 }]}>{sub.name}</Text>
               </View>
-              <Text style={styles.neetSubDesc}>{sub.desc}</Text>
-              <ExternalLink size={16} color={c.label3} />
-            </View>
-          </Pressable>
-        ))}
-      </Card>
+            </Rise>
+
+            {/* 1 — countdown + competition */}
+            <Rise delay={70}>
+              <Card style={styles.neetHero} padding={0}>
+                <Text style={styles.neetHeroLabel}>Days to exam · {formatShortDateFromISO(NEET_EXAM_DATE)}</Text>
+                <Text style={styles.neetDays}>
+                  {daysLeft}
+                  <Text style={styles.neetDaysUnit}> days</Text>
+                </Text>
+                <Text style={styles.neetClock}>
+                  {pad(hoursLeft)}:{pad(minutesLeft)}:{pad(secondsLeft)} until NEET opens
+                </Text>
+                <View style={styles.separatorInset} />
+                <View style={styles.neetStatRow}>
+                  <View style={styles.neetStatCell}>
+                    <Text style={styles.neetStatNum}>24.2L</Text>
+                    <Text style={styles.neetStatLabel}>aspirants</Text>
+                  </View>
+                  <View style={styles.neetStatCell}>
+                    <Text style={styles.neetStatNum}>1.1L</Text>
+                    <Text style={styles.neetStatLabel}>MBBS seats</Text>
+                  </View>
+                  <View style={styles.neetStatCell}>
+                    <Text style={styles.neetStatNum}>1 in 22</Text>
+                    <Text style={styles.neetStatLabel}>get in</Text>
+                  </View>
+                </View>
+                <View style={styles.separatorInset} />
+                <Text style={styles.neetFootnote}>
+                  Last year Gen cutoff: 715/720
+                  {latestGap !== null ? (
+                    latestGap >= 0 ? (
+                      <Text style={{ color: c.mint, fontFamily: BODY_SEMI }}> · you're +{latestGap} above it</Text>
+                    ) : (
+                      <Text style={{ color: c.gold, fontFamily: BODY_SEMI }}> · you're {Math.abs(latestGap)} short</Text>
+                    )
+                  ) : null}
+                </Text>
+              </Card>
+            </Rise>
+
+            {/* 2 — mock predictor */}
+            <SectionHeader title="Mock predictor" />
+            <Card style={{ padding: 20 }}>
+              <Text style={styles.neetFootnote}>Log a mock to see percentile, AIR range and where you stand against last year's cutoff.</Text>
+              <View style={styles.neetFieldRow}>
+                <TextInput
+                  value={scoreText}
+                  onChangeText={setScoreText}
+                  placeholder="Score out of 720"
+                  placeholderTextColor={c.label3}
+                  keyboardType="number-pad"
+                  style={styles.neetScoreInput}
+                  maxLength={3}
+                />
+                <Pressable style={[styles.neetLogBtn, { backgroundColor: c.tint }]} onPress={logMock}>
+                  <Text style={styles.neetLogBtnText}>Log mock</Text>
+                </Pressable>
+              </View>
+              <Segmented options={NEET_CATEGORIES} value={category} onChange={setCategory} />
+
+              {mockResult ? (
+                <View style={[styles.neetResult, { backgroundColor: c.tintSoft }]}>
+                  <Text style={styles.neetResultTop}>
+                    {mockResult.percentileLabel}%ile · AIR ~{mockResult.air.toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={[styles.neetResultGap, { color: mockResult.isAboveCutoff ? c.mint : c.gold }]}>
+                    {mockResult.isAboveCutoff ? `+${mockResult.cutoffGap} above` : `${Math.abs(mockResult.cutoffGap)} below`} {mockResult.category} cutoff ({mockResult.cutoff})
+                  </Text>
+                </View>
+              ) : null}
+
+              {mocks.length ? (
+                <View style={{ marginTop: 12 }}>
+                  {mocks.slice(0, 6).map((m) => (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => removeMock(m)}
+                      style={({ pressed }) => [styles.neetMockRow, pressed && { opacity: 0.6 }]}
+                    >
+                      <Text style={styles.neetMockName} numberOfLines={1}>
+                        {m.name} · {m.category}
+                      </Text>
+                      <Text style={styles.neetMockMeta}>
+                        {m.percentileLabel}%ile · {m.cutoffGap >= 0 ? `+${m.cutoffGap}` : m.cutoffGap} vs cutoff
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </Card>
+          </>
+        }
+        right={
+          <>
+            {/* 3 — syllabus checklist */}
+            <SectionHeader
+              flush={isWide}
+              title="Syllabus"
+              trailing={<Text style={styles.neetProgress}>{syllabusState.percent}% covered</Text>}
+            />
+            <Card style={{ padding: 20 }}>
+              <Segmented
+                options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
+                value={openSubject}
+                onChange={setOpenSubject}
+              />
+              <View style={{ marginTop: 8 }}>
+                {subjectChapters.map((ch) => {
+                  const done = Boolean(syllabusState.checks[ch.id]);
+                  const wColor = ch.weightage === "High" ? c.mint : ch.weightage === "Medium" ? c.gold : c.label3;
+                  return (
+                    <Pressable
+                      key={ch.id}
+                      onPress={() => toggleChapter(ch.id)}
+                      style={({ pressed }) => [styles.neetChapterRow, pressed && { opacity: 0.6 }]}
+                    >
+                      <View style={[styles.neetCheck, done && { backgroundColor: c.tint, borderColor: c.tint }]}>
+                        {done ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
+                      </View>
+                      <Text style={[styles.neetChapterName, done && { color: c.label3, textDecorationLine: "line-through" }]} numberOfLines={1}>
+                        {ch.chapter}
+                      </Text>
+                      <View style={[styles.neetWeight, { backgroundColor: c.fill }]}>
+                        <Text style={[styles.neetWeightText, { color: wColor }]}>{ch.weightage}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Card>
+
+            {/* 4 — community links */}
+            <SectionHeader title="Community" />
+            <Card style={{ padding: 20 }}>
+              {SUBREDDITS.map((sub, i) => (
+                <Pressable
+                  key={sub.name}
+                  onPress={() => Linking.openURL(sub.url).catch(() => {})}
+                  style={({ pressed }) => [styles.neetSubRow, i === 0 && { paddingTop: 0 }, pressed && { opacity: 0.6 }]}
+                >
+                  <View style={styles.neetSubHead}>
+                    <View style={[styles.neetSubBadge, { backgroundColor: c.fill }]}>
+                      <Text style={[styles.neetSubBadgeText, { color: c.label2 }]}>{sub.name}</Text>
+                    </View>
+                    <Text style={styles.neetSubDesc}>{sub.desc}</Text>
+                    <ExternalLink size={16} color={c.label3} />
+                  </View>
+                </Pressable>
+              ))}
+            </Card>
+          </>
+        }
+      />
     </ScreenScroll>
   );
 }
