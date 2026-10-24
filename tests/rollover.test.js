@@ -75,6 +75,18 @@ test('previousDayKey handles a leap February', () => {
   expect(previousDayKey('2024-03-01')).toBe('2024-02-29');
 });
 
+// 2027-03-14 is the US spring-forward day (23 hours long). Stepping *from*
+// the 15th must land on the 14th: a -86400000ms implementation returns the
+// 13th, because 24 hours earlier is still 23:00 on the 13th.
+test('previousDayKey steps from the DST spring-forward day', () => {
+  expect(previousDayKey('2027-03-15')).toBe('2027-03-14');
+});
+
+// 2027-11-07 is the US fall-back day (25 hours long).
+test('previousDayKey steps from the DST fall-back day', () => {
+  expect(previousDayKey('2027-11-08')).toBe('2027-11-07');
+});
+
 test('computeBacklog uses the logical day before the rollover hour', () => {
   const result = computeBacklog(NIGHT_LOGS, DAILY_GOAL_MINUTES, 3, NIGHT);
 
@@ -125,6 +137,30 @@ test('computeStreak does not double-count the DST spring-forward day', () => {
     { date: '2027-03-14', duration: STREAK_MIN_MINUTES },
     { date: '2027-03-13', duration: STREAK_MIN_MINUTES },
     { date: '2027-03-12', duration: STREAK_MIN_MINUTES },
+  ];
+  expect(computeStreak(logs, STREAK_MIN_MINUTES, ROLLOVER_HOUR, now)).toBe(3);
+});
+
+// The walk starts on 2027-03-15 and must step onto 2027-03-14, so this fails
+// if previousDayKey ever skips the 23-hour day.
+test('computeStreak walks across the spring-forward day', () => {
+  const now = new Date(2027, 2, 16, 2, 30);
+  const logs = [
+    { date: '2027-03-15', duration: STREAK_MIN_MINUTES },
+    { date: '2027-03-14', duration: STREAK_MIN_MINUTES },
+    { date: '2027-03-13', duration: STREAK_MIN_MINUTES },
+  ];
+  expect(computeStreak(logs, STREAK_MIN_MINUTES, ROLLOVER_HOUR, now)).toBe(3);
+});
+
+// Fall-back 2027-11-07 is 25 hours long and 02:30 exists once, after the
+// repeated 01:00-02:00 hour; the logical day is still 2027-11-06.
+test('computeStreak walks across the fall-back day from a 2:30am start', () => {
+  const now = new Date(2027, 10, 7, 2, 30);
+  const logs = [
+    { date: '2027-11-06', duration: STREAK_MIN_MINUTES },
+    { date: '2027-11-05', duration: STREAK_MIN_MINUTES },
+    { date: '2027-11-04', duration: STREAK_MIN_MINUTES },
   ];
   expect(computeStreak(logs, STREAK_MIN_MINUTES, ROLLOVER_HOUR, now)).toBe(3);
 });
