@@ -1544,6 +1544,7 @@ function Fab({ label, icon: Icon = Plus, onPress }) {
   const { c } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const { isWide } = useLayout();
   return (
     <Pressable
       onPress={() => {
@@ -1552,7 +1553,9 @@ function Fab({ label, icon: Icon = Plus, onPress }) {
       }}
       style={({ pressed }) => [
         styles.fabWrap,
-        { bottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
+        // The pill bar is absent on wide screens, so its clearance is too —
+        // matching ScreenScroll's bottom padding.
+        { bottom: (isWide ? 0 : TAB_BAR_HEIGHT) + insets.bottom + 16 },
         pressed && { transform: [{ scale: 0.95 }], opacity: 0.92 },
       ]}
     >
