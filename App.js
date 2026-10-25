@@ -19,7 +19,6 @@ import {
     KeyboardAvoidingView,
     Linking,
     Modal,
-    NativeModules,
     Platform,
     Pressable,
     ScrollView,
@@ -88,6 +87,7 @@ import {
     logoutUser,
     logStudySession,
     logTestScore,
+    publishWidgetSummary,
     subscribeToCoupleData,
     updateCouplePeriods,
 } from "./firebase";
@@ -125,6 +125,7 @@ import {
     saveMock,
     toggleSyllabusChapter,
 } from "./src/neet";
+import { buildWidgetPayload } from "./src/widget";
 
 // ============================================================
 // TYPE — Inter (tabular nums for figures)
@@ -1069,16 +1070,26 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
     return () => clearTimeout(id);
   }, [backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft]);
 
+  // Publish the home-screen summary. Runs on web too — the PWA is the primary
+  // writer. Debounced 2s because `backlog` recomputes on every tick and each
+  // write is a network round trip. A failed write stays silent: a widget that
+  // is a few minutes stale is not worth interrupting a session.
   useEffect(() => {
-    if (isWeb) return;
-    try {
-      NativeModules.HavenWidget?.updateWidget(
-        `${formatHoursShort(backlog.todayMinutes)}h today`,
-        `${daysLeft}d to NEET · ${backlog.balanceMinutes === 0 ? "Backlog clear" : formatBacklog(backlog.balanceMinutes)}`,
-        streak || 0,
-      );
-    } catch {}
-  }, [backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft]);
+    if (!coupleId) return undefined;
+    const id = setTimeout(() => {
+      publishWidgetSummary(
+        coupleId,
+        buildWidgetPayload({
+          todayMinutes: backlog.todayMinutes,
+          streak,
+          balanceMinutes: backlog.balanceMinutes,
+          daysLeft,
+          goldDays,
+        }),
+      ).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(id);
+  }, [coupleId, backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft, goldDays]);
 
   const lastActive = useRef(Date.now());
   useEffect(() => {

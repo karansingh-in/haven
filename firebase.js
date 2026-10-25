@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
@@ -177,4 +178,18 @@ export const deleteTestScore = async (coupleId, timestamp) => {
   await updateDoc(ref, {
     testScores: scores.filter((s) => s?.timestamp !== timestamp),
   });
+};
+
+// --------------------------------------------------
+// HOME-SCREEN WIDGET
+// --------------------------------------------------
+
+// `widgets/{coupleId}` is world-readable so the Scriptable widget can fetch it
+// without credentials; `payload` comes from src/widget.js, which is the
+// allow-list for what may leave the device. Merge so a failed write never
+// blanks the widget.
+export const publishWidgetSummary = async (coupleId, payload) => {
+  if (!coupleId) return;
+
+  await setDoc(doc(db, "widgets", coupleId), payload, { merge: true });
 };
