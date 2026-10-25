@@ -102,11 +102,18 @@ import {
     dayKeyFor,
     DEFAULT_PREFS,
     formatBacklog,
+    formatDuration,
+    formatHoursShort,
+    formatSignedDelta,
+    formatThousands,
     goalReached,
     goldDaysKeyFor,
     gradeFor,
     loadPrefs,
+    paceStatus,
+    remainingCapacity,
     savePrefs,
+    weekOverWeek,
 } from "./backlog";
 import {
     ensureNotificationSetup,
@@ -471,21 +478,6 @@ const getGreeting = () => {
 
 const HOUR_PRESETS = [0.5, 1, 2, 4, 6];
 const hoursToMinutes = (hours) => Math.round(Number(hours) * 60);
-
-const formatDuration = (minutes) => {
-  const total = Math.max(0, Math.round(Number(minutes) || 0));
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (!h) return `${m}m`;
-  if (!m) return `${h}h`;
-  return `${h}h ${m}m`;
-};
-
-const formatHoursShort = (minutes) => {
-  const hours = Math.max(0, Number(minutes) || 0) / 60;
-  if (hours === 0) return "0";
-  return hours % 1 === 0 ? String(hours) : hours.toFixed(1);
-};
 
 // react-native-web has no Alert implementation — Alert.alert is a silent no-op
 // there, which turns every destructive confirmation into a dead button. Use the
@@ -1917,6 +1909,12 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
   const pct = Math.round((todayMinutes / DAILY_GOAL_MINUTES) * 100);
   const goalDone = todayMinutes >= DAILY_GOAL_MINUTES;
 
+  // Pace is judged against the 03:00-anchored day, so it is only meaningful once
+  // something is logged or the morning has started. At 04:00 with nothing done
+  // there is no story to tell.
+  const pace = paceStatus(todayMinutes);
+  const showPace = todayMinutes > 0 || new Date().getHours() >= 6;
+
   return (
     <ScreenScroll>
       <Split
@@ -1949,12 +1947,20 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
                 <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCardInner}>
                   <View style={styles.heroGlow} />
                   <View style={styles.heroRow}>
-                    <Ring size={128} stroke={13} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
-                      <View style={{ alignItems: "center" }}>
-                        <Text style={styles.heroRingValue}>{formatHoursShort(todayMinutes)}h</Text>
-                        <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of 8h`}</Text>
-                      </View>
-                    </Ring>
+                    <View style={{ alignItems: "center", gap: 8 }}>
+                      <Ring size={128} stroke={13} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
+                        <View style={{ alignItems: "center" }}>
+                          <Text style={styles.heroRingValue}>{formatHoursShort(todayMinutes)}h</Text>
+                          <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of 8h`}</Text>
+                        </View>
+                      </Ring>
+                      {showPace ? (
+                        <View style={styles.heroPace}>
+                          <View style={[styles.heroPaceDot, { backgroundColor: pace.tone === "ahead" ? "#8FE3C8" : pace.tone === "behind" ? "#FFD98A" : "rgba(255,255,255,0.7)" }]} />
+                          <Text style={styles.heroPaceText}>{pace.text}</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.heroKicker}>{goalDone ? "GOLD DAY" : "TODAY'S FOCUS"}</Text>
                       <Text style={styles.heroLine}>
@@ -2581,6 +2587,13 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
   const weeklyMax = Math.max(...weekly.map((d) => d.minutes), 120);
   const weeklyTotal = weekly.reduce((sum, d) => sum + d.minutes, 0);
 
+  // "This week vs last week" reads off the same byDay map the backlog uses; no
+  // second chart, one line under the header.
+  const duel = useMemo(
+    () => weekOverWeek(backlog?.byDay, backlog?.todayKey || getTodayKey()),
+    [backlog?.byDay, backlog?.todayKey],
+  );
+
   const bestTest = testScores.length
     ? testScores.reduce((best, t) => {
         const p = Number(t.total) > 0 ? (Number(t.score) / Number(t.total)) * 100 : -1;
@@ -2622,6 +2635,14 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
         <Text style={styles.goldLine}>
           {goldDays.length} gold days · {goldMonthCount} this month
         </Text>
+        <Text
+          style={[
+            styles.duelLine,
+            { color: duel.delta === 0 ? c.label2 : duel.delta > 0 ? c.mint : c.gold },
+          ]}
+        >
+          {duel.delta === 0 ? "Same as last week" : `${formatSignedDelta(duel.delta)} vs last week`}
+        </Text>
       </Rise>
 
       <Rise delay={70}>
@@ -2629,7 +2650,7 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
           <BarChart3 size={18} color={c.tint} />
           <View style={{ flex: 1 }}>
             <Text style={styles.backlogTitle}>
-              {(backlog?.balanceMinutes || 0) === 0 ? "Backlog clear" : `${formatBacklog(backlog.balanceMinutes)} backlog`} · {formatDuration(weeklyTotal)} this week
+              {(backlog?.balanceMinutes || 0) === 0 ? "Backlog clear" : formatBacklog(backlog.balanceMinutes)} · {formatDuration(weeklyTotal)} this week
             </Text>
             <Text style={styles.backlogSub}>Missed 8h days stack up · surplus burns them · floor at 0</Text>
           </View>
@@ -2997,6 +3018,9 @@ function NeetScreen({ coupleId }) {
                 </Text>
                 <Text style={styles.neetClock}>
                   {pad(hoursLeft)}:{pad(minutesLeft)}:{pad(secondsLeft)} until NEET opens
+                </Text>
+                <Text style={styles.neetCapacity}>
+                  {daysLeft} days × 8h = {formatThousands(remainingCapacity(daysLeft) / 60)}h left
                 </Text>
                 <View style={styles.separatorInset} />
                 <View style={styles.neetStatRow}>
@@ -3879,6 +3903,15 @@ const makeStyles = (c) =>
       fontVariant: ["tabular-nums"],
       ...TEXT_FIX,
     },
+    neetCapacity: {
+      marginTop: 4,
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: BODY,
+      color: c.label3,
+      fontVariant: ["tabular-nums"],
+      ...TEXT_FIX,
+    },
     neetStatRow: { flexDirection: "row", paddingVertical: 12 },
     neetStatCell: { flex: 1, alignItems: "center" },
     neetStatNum: {
@@ -4016,6 +4049,7 @@ const makeStyles = (c) =>
     homeHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 12 },
     pageHeader: { flexDirection: "row", alignItems: "center", marginBottom: 18, gap: 10 },
     goldLine: { marginTop: -8, marginBottom: 16, fontSize: 13, lineHeight: 19, fontFamily: BODY_MED, color: c.label2, ...TEXT_FIX },
+    duelLine: { marginTop: -12, marginBottom: 16, fontSize: 13, lineHeight: 19, fontFamily: BODY_SEMI, ...TEXT_FIX },
     eyebrow: {
       fontSize: 11,
       lineHeight: 15,
@@ -4088,6 +4122,17 @@ const makeStyles = (c) =>
       lineHeight: 15,
       fontFamily: BODY_MED,
       color: "rgba(255,255,255,0.85)",
+      ...TEXT_FIX,
+    },
+    // The pace line sits on the gradient card, so contrast comes from white text
+    // and a tone-coloured dot rather than mint/gold text on iOS blue.
+    heroPace: { flexDirection: "row", alignItems: "center", gap: 6 },
+    heroPaceDot: { width: 6, height: 6, borderRadius: 3 },
+    heroPaceText: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: BODY_MED,
+      color: "rgba(255,255,255,0.92)",
       ...TEXT_FIX,
     },
     heroKicker: {

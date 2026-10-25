@@ -79,6 +79,80 @@ export function formatHoursShort(minutes) {
   return hours % 1 === 0 ? String(hours) : hours.toFixed(1);
 }
 
+export function formatDuration(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m}m`;
+  if (!m) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// A gap under a quarter hour is noise, not a verdict.
+export const PACE_DEADBAND_MINUTES = 15;
+
+// Minutes that *should* be logged by now, if the 8 hours were spread evenly
+// across the logical day. At 03:00 that is zero; at 02:59 it is the whole goal.
+export function paceTarget(now = new Date(), goal = DAILY_GOAL_MINUTES, rolloverHour = ROLLOVER_HOUR) {
+  const date = now instanceof Date ? now : new Date(now);
+  const goalMinutes = Math.max(0, Number(goal) || 0);
+  const elapsed =
+    (date.getHours() - rolloverHour) * 60 + date.getMinutes() + date.getSeconds() / 60;
+  const dayMinutes = Math.min(1440, Math.max(0, elapsed < 0 ? elapsed + 1440 : elapsed));
+  return Math.round((dayMinutes / 1440) * goalMinutes);
+}
+
+export function paceStatus(todayMinutes, now = new Date(), goal = DAILY_GOAL_MINUTES, rolloverHour = ROLLOVER_HOUR) {
+  const target = paceTarget(now, goal, rolloverHour);
+  const delta = Math.round((Number(todayMinutes) || 0) - target);
+
+  if (Math.abs(delta) < PACE_DEADBAND_MINUTES) {
+    return { target, delta, tone: "on", text: "On pace" };
+  }
+
+  return {
+    target,
+    delta,
+    tone: delta > 0 ? "ahead" : "behind",
+    text: `${formatDuration(Math.abs(delta))} ${delta > 0 ? "ahead of" : "behind"} pace`,
+  };
+}
+
+// Two seven-day windows ending on today, inclusive.
+export function weekOverWeek(byDay, todayKey) {
+  const map = byDay && typeof byDay === "object" ? byDay : {};
+  let thisWeek = 0;
+  let lastWeek = 0;
+  let key = todayKey;
+
+  for (let i = 0; i < 14 && key; i += 1) {
+    const minutes = Number(map[key]) || 0;
+    if (i < 7) thisWeek += minutes;
+    else lastWeek += minutes;
+    key = previousDayKey(key);
+  }
+
+  return { thisWeek, lastWeek, delta: thisWeek - lastWeek };
+}
+
+// "+1h 20m" / "−45m"; null when the weeks are level, so callers can say
+// "same as last week" instead of "+0m".
+export function formatSignedDelta(minutes) {
+  const delta = Math.round(Number(minutes) || 0);
+  if (!delta) return null;
+  const abs = Math.abs(delta);
+  return `${delta > 0 ? "+" : "−"}${formatDuration(abs)}`;
+}
+
+// Minutes the remaining days can still absorb at the daily goal.
+export function remainingCapacity(daysLeft, goal = DAILY_GOAL_MINUTES) {
+  return Math.max(0, Math.round(Number(daysLeft) || 0)) * Math.max(0, Number(goal) || 0);
+}
+
+export function formatThousands(value) {
+  return String(Math.round(Number(value) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 // Streak: consecutive days ending today (or yesterday if today empty) with >= streakMin minutes.
 export function computeStreak(studyLogs = [], streakMin = STREAK_MIN_MINUTES, rolloverHour = ROLLOVER_HOUR, now = new Date()) {
   const byDay = {};
