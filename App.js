@@ -1017,6 +1017,9 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { isWide } = useLayout();
+  // The browser build has no scheduled notifications, no widget and no
+  // biometric API; every native-only effect below is skipped there.
+  const isWeb = Platform.OS === "web";
 
   const [tab, setTab] = useState("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1039,6 +1042,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   const streak = useMemo(() => computeStreak(coupleData.studyLogs), [coupleData.studyLogs, tick]);
 
   useEffect(() => {
+    if (isWeb) return;
     ensureNotificationSetup();
     requestNotificationPermission().then((granted) => {
       if (!granted) return;
@@ -1066,6 +1070,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   }, [backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft]);
 
   useEffect(() => {
+    if (isWeb) return;
     try {
       NativeModules.HavenWidget?.updateWidget(
         `${formatHoursShort(backlog.todayMinutes)}h today`,
@@ -1077,6 +1082,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 
   const lastActive = useRef(Date.now());
   useEffect(() => {
+    if (isWeb) return;
     const sub = AppState.addEventListener("change", (status) => {
       if (status === "background" || status === "inactive") {
         lastActive.current = Date.now();
@@ -1092,6 +1098,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   }, [prefs.lockEnabled, prefs.lockDelaySec, timer.running]);
 
   useEffect(() => {
+    if (isWeb) return;
     if (prefs.lockEnabled && !timer.running) {
       const id = setTimeout(() => setLocked(true), 600);
       return () => clearTimeout(id);
@@ -1239,7 +1246,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         goldDayCount={goldDays.length}
         onDismiss={() => setCelebration(null)}
       />
-      <LockScreen visible={locked} timerRunning={timer.running} onUnlock={() => setLocked(false)} />
+      {isWeb ? null : <LockScreen visible={locked} timerRunning={timer.running} onUnlock={() => setLocked(false)} />}
     </View>
   );
 }
@@ -1711,6 +1718,12 @@ function LockScreen({ visible, onUnlock, timerRunning }) {
   const name = prefs.displayName?.trim() || "Chaaru";
   if (!visible) return null;
   const attempt = async () => {
+    // Biometrics do not exist in the browser build; never import the native
+    // module there.
+    if (Platform.OS === "web") {
+      setError("Fingerprint unlock isn't available in the browser.");
+      return;
+    }
     let LocalAuth = null;
     try {
       LocalAuth = await import("expo-local-authentication");
@@ -3270,6 +3283,9 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
   const { c, preference, setPreference } = useTheme();
   const { prefs, updatePrefs } = usePrefs();
   const styles = useStyles();
+  // Reminders and the fingerprint lock are native-only. On web those controls
+  // would be dead, so the sections are not rendered at all.
+  const isWeb = Platform.OS === "web";
   const [nameDraft, setNameDraft] = useState(prefs.displayName);
   const [affirmDraft, setAffirmDraft] = useState(prefs.affirmation);
 
@@ -3389,26 +3405,30 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
         })}
       </View>
 
-      <SectionHeader title="Reminders" />
-      <Card>
-        <SettingRow icon={Moon} tint={c.tintSoft} title="Wind-down · 2:00 AM daily" sub="Today's hours + backlog + goodnight" right={<Toggle on={prefs.windDownEnabled} onPress={() => toggleNotifs("windDownEnabled")} />} />
-        <View style={styles.separatorInset} />
-        <SettingRow icon={BarChart3} tint={c.goldSoft} title="Weekly report · Sun 8 PM" sub="Week total, goal progress, backlog change" right={<Toggle on={prefs.weeklyReportEnabled} onPress={() => toggleNotifs("weeklyReportEnabled")} />} />
-      </Card>
-      <Text style={styles.sheetHint}>Wind-down becomes a pure goodnight once 8h is done.</Text>
+      {isWeb ? null : (
+        <>
+          <SectionHeader title="Reminders" />
+          <Card>
+            <SettingRow icon={Moon} tint={c.tintSoft} title="Wind-down · 2:00 AM daily" sub="Today's hours + backlog + goodnight" right={<Toggle on={prefs.windDownEnabled} onPress={() => toggleNotifs("windDownEnabled")} />} />
+            <View style={styles.separatorInset} />
+            <SettingRow icon={BarChart3} tint={c.goldSoft} title="Weekly report · Sun 8 PM" sub="Week total, goal progress, backlog change" right={<Toggle on={prefs.weeklyReportEnabled} onPress={() => toggleNotifs("weeklyReportEnabled")} />} />
+          </Card>
+          <Text style={styles.sheetHint}>Wind-down becomes a pure goodnight once 8h is done.</Text>
 
-      <SectionHeader title="Privacy" />
-      <Card>
-        <SettingRow icon={Fingerprint} tint={c.mintSoft} title="Fingerprint lock" sub={prefs.lockEnabled ? "On — timer sessions bypass it" : "Off"} right={<Toggle on={prefs.lockEnabled} onPress={() => updatePrefs({ lockEnabled: !prefs.lockEnabled })} />} />
-        <View style={styles.separatorInset} />
-        <Pressable onPress={() => { onClose(); setTimeout(() => onLockNow?.(), 300); }} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
-          <View style={[styles.glyph, { backgroundColor: c.fill }]}>
-            <ShieldCheck size={17} color={c.label2} />
-          </View>
-          <Text style={[styles.rowTitle, { flex: 1 }]}>Lock now</Text>
-        </Pressable>
-      </Card>
-      <Text style={styles.sheetHint}>Lock triggers when the app returns from background — never while a focus timer runs.</Text>
+          <SectionHeader title="Privacy" />
+          <Card>
+            <SettingRow icon={Fingerprint} tint={c.mintSoft} title="Fingerprint lock" sub={prefs.lockEnabled ? "On — timer sessions bypass it" : "Off"} right={<Toggle on={prefs.lockEnabled} onPress={() => updatePrefs({ lockEnabled: !prefs.lockEnabled })} />} />
+            <View style={styles.separatorInset} />
+            <Pressable onPress={() => { onClose(); setTimeout(() => onLockNow?.(), 300); }} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+              <View style={[styles.glyph, { backgroundColor: c.fill }]}>
+                <ShieldCheck size={17} color={c.label2} />
+              </View>
+              <Text style={[styles.rowTitle, { flex: 1 }]}>Lock now</Text>
+            </Pressable>
+          </Card>
+          <Text style={styles.sheetHint}>Lock triggers when the app returns from background — never while a focus timer runs.</Text>
+        </>
+      )}
 
       <SectionHeader title="Account" />
       <Card>

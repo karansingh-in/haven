@@ -2,18 +2,24 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+// Scheduled local notifications are native-only. Registering the handler at
+// module scope would touch the native module on web (where there is no
+// notification scheduler), so the registration is guarded.
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 const SCHEDULED_KEY = "haven-notif-scheduled-v1";
 
 export async function ensureNotificationSetup() {
+  if (Platform.OS === "web") return;
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("haven-reminders", {
@@ -26,6 +32,9 @@ export async function ensureNotificationSetup() {
 }
 
 export async function requestNotificationPermission() {
+  // No permission prompt exists for the browser build; callers must treat
+  // this as a refusal rather than a silent success.
+  if (Platform.OS === "web") return false;
   try {
     const current = await Notifications.getPermissionsAsync();
     if (current.granted || current.ios?.status === 3) return true;
@@ -37,6 +46,7 @@ export async function requestNotificationPermission() {
 }
 
 export async function cancelAllHavenNotifications() {
+  if (Platform.OS === "web") return;
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
     await AsyncStorage.removeItem(SCHEDULED_KEY);
@@ -45,6 +55,7 @@ export async function cancelAllHavenNotifications() {
 
 // Daily wind-down at fixed hour/minute (repeating calendar trigger).
 export async function scheduleWindDown({ hour, minute, enabled }) {
+  if (Platform.OS === "web") return;
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
@@ -74,6 +85,7 @@ export async function scheduleWindDown({ hour, minute, enabled }) {
 
 // Weekly report — once a week on weekday (1=Sunday..7=Saturday in expo) at hour/minute.
 export async function scheduleWeeklyReport({ weekday, hour, minute, enabled }) {
+  if (Platform.OS === "web") return;
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
@@ -104,6 +116,7 @@ export async function scheduleWeeklyReport({ weekday, hour, minute, enabled }) {
 
 // Dynamic content: reschedule wind-down/weekly with today's computed numbers in body.
 export async function refreshNotificationBodies({ todayText, backlogText, streak, daysLeft }) {
+  if (Platform.OS === "web") return;
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     const wind = scheduled.find((n) => n?.identifier?.startsWith("haven-winddown"));
