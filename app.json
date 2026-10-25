@@ -51,7 +51,8 @@
       ]
     ],
     "experiments": {
-      "reactCompiler": true
+      "reactCompiler": true,
+      "baseUrl": "/haven"
     }
   }
 }
