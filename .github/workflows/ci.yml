@@ -16,8 +16,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npx jest --ci
+      # --forceExit: the react-test-renderer suites leave animations/timers
+      # running, and Jest intermittently fails the run on a worker that will not
+      # exit even though every test passed.
+      - run: npx jest --ci --forceExit
       # DST assertions only bite in a zone that observes DST; UTC would hide them.
-      - run: npx jest tests/rollover.test.js --ci
+      - run: npx jest tests/rollover.test.js --ci --forceExit
         env:
           TZ: America/New_York

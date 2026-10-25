@@ -1,56 +1,45 @@
-# Welcome to your Expo app 👋
+# Haven
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A private, single-user study app for NEET UG — one person, one iPad, no accounts to manage beyond your own.
 
-## Get started
+**Live:** https://karansingh-in.github.io/haven/ — open in Safari, then Share → Add to Home Screen.
 
-1. Install dependencies
+## What it does
 
-   ```bash
-   npm install
-   ```
+- **8-hour focus goal** that resets at 03:00 local time, so a 1am session still counts for the day you are living.
+- **Wall-clock timer** that survives backgrounding and app restarts, study logs, backlog and streaks.
+- **Gold days** — the full-screen moment when the eight hours land, recorded so you can see the chain later.
+- **Calendar** with cycle tracking, and **Insights** for weekly and monthly totals.
+- **NEET tab** — countdown, syllabus coverage with chapter weightage, and a mock-score predictor.
 
-2. Start the app
+Single user by design: data lives in your own Firestore project, and nothing is shared with anyone.
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Running it
 
 ```bash
-npm run reset-project
+npm install
+npm run web        # browser, at http://localhost:8081
+npm run android    # native Android build
+npx jest           # 53 tests
+npm run lint
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Icons
 
-### Other setup steps
+The Focus Ring icon is generated, not hand-drawn one size at a time:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npm run icons      # assets/icons/*.svg -> assets/images/*, assets/icon.png, public/*
+```
 
-## Learn more
+Everything Expo, Android and the PWA consume comes out of that one command. `scripts/build-icons.mjs` asserts every output's dimensions and which files may keep alpha.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Deploying
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Pushing to `main` triggers `.github/workflows/pages.yml`, which runs `npm run build:web` and publishes `dist/` to GitHub Pages.
 
-## Join the community
+The site is served from a subpath (`/haven/`), so `app.json` sets `experiments.baseUrl` to `/haven` and the manifest and apple-touch-icon links in `public/index.html` stay relative. Local previews of the exported build therefore need to be served under that prefix; `npm run web` (the dev server) is unaffected.
 
-Join our community of developers creating universal apps.
+## Layout
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+One `App.js` holds the shell (responsive rail above 1000pt), the screens and the design-system styles. `backlog.js` holds the day-boundary maths, kept pure and unit-tested because everything else depends on it.
