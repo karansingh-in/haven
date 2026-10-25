@@ -44,6 +44,7 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
+    CircleCheck,
     Eye,
     EyeOff,
     Fingerprint,
@@ -125,6 +126,14 @@ import {
     saveMock,
     toggleSyllabusChapter,
 } from "./src/neet";
+import {
+    MISTAKE_REASONS,
+    addMistake,
+    deleteMistake,
+    dueMistakes,
+    getMistakes,
+    reviewMistake,
+} from "./src/mistakes";
 import { buildWidgetPayload } from "./src/widget";
 
 // ============================================================
@@ -475,6 +484,20 @@ const formatHoursShort = (minutes) => {
   const hours = Math.max(0, Number(minutes) || 0) / 60;
   if (hours === 0) return "0";
   return hours % 1 === 0 ? String(hours) : hours.toFixed(1);
+};
+
+// react-native-web has no Alert implementation — Alert.alert is a silent no-op
+// there, which turns every destructive confirmation into a dead button. Use the
+// browser's own confirm on web and the native alert everywhere else.
+const confirmDestructive = ({ title, message, confirmLabel = "Delete", onConfirm }) => {
+  if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+    if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    { text: confirmLabel, style: "destructive", onPress: onConfirm },
+  ]);
 };
 
 const formatClock = (ms) => {
@@ -1536,12 +1559,16 @@ function Sheet({ visible, title, subtitle, onClose, children }) {
   const { c } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  // A percentage maxHeight resolves against an auto-height wrapper on web, so
+  // tall sheets used to grow past the top of the screen with no way to scroll
+  // to the header. A numeric cap works on both platforms.
+  const { height: windowHeight } = useWindowDimensions();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={styles.sheetBackdrop}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12, maxHeight: windowHeight * 0.9 }]}>
             <View style={styles.grabber} />
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
@@ -1552,7 +1579,7 @@ function Sheet({ visible, title, subtitle, onClose, children }) {
                 <X size={18} color={c.label2} strokeWidth={2.2} />
               </Pressable>
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
               {children}
             </ScrollView>
           </View>
@@ -2748,6 +2775,21 @@ const NEET_CATEGORIES = [
 
 const NEET_SUBJECTS = ["Physics", "Chemistry", "Botany", "Zoology"];
 
+const MISTAKE_REASON_LABELS = {
+  concept: "Concept gap",
+  silly: "Silly slip",
+  time: "Ran out of time",
+  guess: "Guessed",
+};
+
+// "tomorrow" reads better than "in 1d" right after logging.
+function reviewLabel(reviewAt, now) {
+  const days = Math.ceil((Number(reviewAt) - now) / 86400000);
+  if (!Number.isFinite(days) || days <= 0) return "due now";
+  if (days === 1) return "tomorrow";
+  return `in ${days}d`;
+}
+
 function NeetScreen({ coupleId }) {
   const { c } = useTheme();
   const styles = useStyles();
@@ -2849,6 +2891,64 @@ function NeetScreen({ coupleId }) {
   };
 
   const subjectChapters = SYLLABUS.filter((ch) => ch.subject === openSubject);
+
+  // --- mistake log ---
+  const [mistakes, setMistakes] = useState([]);
+  const [mistakeSheet, setMistakeSheet] = useState(false);
+  const [mistakeHint, setMistakeHint] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    getMistakes(coupleId).then((list) => alive && setMistakes(list));
+    return () => {
+      alive = false;
+    };
+  }, [coupleId]);
+
+  // Confirmation fades on its own so the card does not keep claiming something
+  // was just added twenty minutes ago.
+  useEffect(() => {
+    if (!mistakeHint) return undefined;
+    const id = setTimeout(() => setMistakeHint(""), 8000);
+    return () => clearTimeout(id);
+  }, [mistakeHint]);
+
+  const due = useMemo(() => dueMistakes(mistakes, now), [mistakes, now]);
+  const upcoming = useMemo(
+    () =>
+      mistakes
+        .filter((m) => !m.resolvedAt && !due.some((d) => d.id === m.id))
+        .sort((a, b) => Number(a.reviewAt) - Number(b.reviewAt)),
+    [mistakes, due],
+  );
+  const shownMistakes = useMemo(() => [...due, ...upcoming].slice(0, 5), [due, upcoming]);
+
+  const saveMistake = async (fields) => {
+    const saved = await addMistake(coupleId, fields);
+    if (!saved) return;
+    setMistakes((prev) => [saved, ...prev]);
+    setMistakeSheet(false);
+    setMistakeHint(`Logged. Comes back ${reviewLabel(saved.reviewAt, now)}.`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  };
+
+  const markReviewed = (id) => {
+    Haptics.selectionAsync().catch(() => {});
+    reviewMistake(coupleId, id, Date.now())
+      .then((next) => setMistakes(next))
+      .catch(() => {});
+  };
+
+  const removeMistake = (mistake) => {
+    confirmDestructive({
+      title: "Delete this mistake?",
+      message: `${mistake.subject} · ${mistake.chapter}`,
+      onConfirm: async () => {
+        const next = await deleteMistake(coupleId, mistake.id);
+        setMistakes(next);
+      },
+    });
+  };
 
   return (
     <ScreenScroll>
@@ -2963,7 +3063,94 @@ function NeetScreen({ coupleId }) {
         }
         right={
           <>
-            {/* 3 — syllabus checklist */}
+            {/* 3 — mistake log */}
+            <SectionHeader
+              flush={isWide}
+              title="Mistakes"
+              trailing={
+                <Text style={[styles.neetProgress, { color: due.length ? c.gold : c.label3 }]}>
+                  {due.length ? `${due.length} due` : "clear"}
+                </Text>
+              }
+            />
+            <Card style={{ padding: 20 }}>
+              {shownMistakes.length ? (
+                <View style={{ marginTop: -8 }}>
+                  {shownMistakes.map((mistake, index) => {
+                    const isDue = !mistake.resolvedAt && Number(mistake.reviewAt) <= now;
+                    return (
+                      <View key={mistake.id}>
+                        {index > 0 ? <View style={styles.separatorInset} /> : null}
+                        <View style={styles.mistakeRow}>
+                          <View style={{ flex: 1, gap: 4 }}>
+                            <Text style={styles.mistakeTitle} numberOfLines={1}>
+                              {mistake.subject} · {mistake.chapter}
+                            </Text>
+                            <View style={styles.mistakeMetaRow}>
+                              <View style={[styles.neetWeight, { backgroundColor: c.fill }]}>
+                                <Text style={[styles.neetWeightText, { color: c.label2 }]}>
+                                  {MISTAKE_REASON_LABELS[mistake.reason] || mistake.reason}
+                                </Text>
+                              </View>
+                              <Text style={[styles.mistakeMeta, isDue && { color: c.gold }]}>
+                                {isDue ? "due now" : reviewLabel(mistake.reviewAt, now)}
+                              </Text>
+                            </View>
+                            {mistake.note ? (
+                              <Text style={styles.mistakeNote} numberOfLines={2}>
+                                {mistake.note}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {isDue ? (
+                            <Pressable
+                              onPress={() => markReviewed(mistake.id)}
+                              hitSlop={8}
+                              style={styles.mistakeAction}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Mark ${mistake.chapter} reviewed`}
+                            >
+                              <CircleCheck size={22} color={c.mint} strokeWidth={2.1} />
+                            </Pressable>
+                          ) : null}
+                          <Pressable
+                            onPress={() => removeMistake(mistake)}
+                            hitSlop={8}
+                            style={styles.mistakeAction}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete the ${mistake.chapter} mistake`}
+                          >
+                            <Trash2 size={17} color={c.label3} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.neetFootnote}>
+                  Nothing due. Log a wrong question and it comes back tomorrow.
+                </Text>
+              )}
+
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setMistakeSheet(true);
+                }}
+                style={({ pressed }) => [styles.mistakeAdd, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Log a mistake"
+              >
+                <Plus size={15} color={c.tint} strokeWidth={2.6} />
+                <Text style={[styles.mistakeAddText, { color: c.tint }]}>Log mistake</Text>
+              </Pressable>
+              {mistakeHint ? (
+                <Text style={[styles.mistakeHint, { color: c.mint }]}>{mistakeHint}</Text>
+              ) : null}
+            </Card>
+
+            {/* 4 — syllabus checklist */}
             <SectionHeader
               flush={isWide}
               title="Syllabus"
@@ -3000,7 +3187,7 @@ function NeetScreen({ coupleId }) {
               </View>
             </Card>
 
-            {/* 4 — community links */}
+            {/* 5 — community links */}
             <SectionHeader title="Community" />
             <Card style={{ padding: 20 }}>
               {SUBREDDITS.map((sub, i) => (
@@ -3022,7 +3209,143 @@ function NeetScreen({ coupleId }) {
           </>
         }
       />
+
+      <MistakeSheet
+        visible={mistakeSheet}
+        onClose={() => setMistakeSheet(false)}
+        onSave={saveMistake}
+      />
     </ScreenScroll>
+  );
+}
+
+function MistakeSheet({ visible, onClose, onSave }) {
+  const { c } = useTheme();
+  const styles = useStyles();
+  const [subject, setSubject] = useState(NEET_SUBJECTS[0]);
+  const [chapter, setChapter] = useState("");
+  const [reason, setReason] = useState(MISTAKE_REASONS[0]);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setSubject(NEET_SUBJECTS[0]);
+    setChapter("");
+    setReason(MISTAKE_REASONS[0]);
+    setNote("");
+    setSaving(false);
+  }, [visible]);
+
+  const chapters = SYLLABUS.filter((entry) => entry.subject === subject);
+
+  const pickSubject = (next) => {
+    Haptics.selectionAsync().catch(() => {});
+    setSubject(next);
+    // A chapter from another subject would not match the new list.
+    setChapter("");
+  };
+
+  const submit = async () => {
+    if (!chapter) {
+      Alert.alert("Pick a chapter", "A mistake is only useful if you know where it came from.");
+      return;
+    }
+    try {
+      setSaving(true);
+      await onSave({ subject, chapter, reason, note });
+    } catch (error) {
+      Alert.alert("Not saved", error?.message || "Try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet
+      visible={visible}
+      title="Log mistake"
+      subtitle="It comes back tomorrow, then after 3, 7 and 21 days."
+      onClose={onClose}
+    >
+      <Segmented
+        options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
+        value={subject}
+        onChange={pickSubject}
+      />
+
+      <SectionHeader title="Chapter" />
+      <View style={styles.chipWrap}>
+        {chapters.map((entry) => {
+          const active = entry.chapter === chapter;
+          return (
+            <Pressable
+              key={entry.id}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setChapter(entry.chapter);
+              }}
+              style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={entry.chapter}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{entry.chapter}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <SectionHeader title="Why" />
+      <View style={styles.chipWrap}>
+        {MISTAKE_REASONS.map((value) => {
+          const active = value === reason;
+          return (
+            <Pressable
+              key={value}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setReason(value);
+              }}
+              style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={MISTAKE_REASON_LABELS[value]}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {MISTAKE_REASON_LABELS[value]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.group}>
+        <View style={styles.fieldRow}>
+          <Text style={styles.fieldLabel}>Note</Text>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="What went wrong? Optional"
+            placeholderTextColor={c.label3}
+            style={styles.fieldInput}
+            accessibilityLabel="Mistake note"
+          />
+        </View>
+      </View>
+
+      <Pressable
+        onPress={submit}
+        disabled={saving}
+        style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}
+        accessibilityRole="button"
+        accessibilityLabel="Save mistake"
+      >
+        <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save mistake</Text>}
+        </LinearGradient>
+      </Pressable>
+    </Sheet>
   );
 }
 
@@ -3519,6 +3842,9 @@ const makeStyles = (c) =>
     neetFieldRow: { flexDirection: "row", gap: 10, marginTop: 12, marginBottom: 12 },
     neetScoreInput: {
       flex: 1,
+      // Without this a web <input> keeps its intrinsic width and shoves the
+      // button past the card edge on a narrow screen.
+      minWidth: 0,
       height: 44,
       borderRadius: 10,
       backgroundColor: c.surfaceSunken,
@@ -3592,6 +3918,36 @@ const makeStyles = (c) =>
     neetSubBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
     neetSubBadgeText: { fontSize: 12, lineHeight: 16, fontFamily: BODY_SEMI, ...TEXT_FIX },
     neetSubDesc: { fontSize: 13, lineHeight: 18, fontFamily: BODY, color: c.label2, flex: 1, ...TEXT_FIX },
+
+    // MISTAKE LOG
+    mistakeRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10 },
+    mistakeTitle: { fontSize: 14, lineHeight: 19, fontFamily: BODY_MED, color: c.label, ...TEXT_FIX },
+    mistakeMetaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+    mistakeMeta: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: BODY,
+      color: c.label3,
+      fontVariant: ["tabular-nums"],
+      ...TEXT_FIX,
+    },
+    mistakeNote: { fontSize: 12, lineHeight: 16, fontFamily: BODY, color: c.label2, ...TEXT_FIX },
+    mistakeAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    mistakeAdd: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, paddingTop: 10 },
+    mistakeAddText: { fontSize: 15, lineHeight: 20, fontFamily: BODY_SEMI, ...TEXT_FIX },
+    mistakeHint: { fontSize: 12, lineHeight: 16, fontFamily: BODY_MED, marginTop: -6, ...TEXT_FIX },
+    chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+    chip: {
+      minHeight: 40,
+      justifyContent: "center",
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: "transparent",
+      paddingHorizontal: 12,
+      backgroundColor: c.surfaceSunken,
+    },
+    chipText: { fontSize: 14, lineHeight: 19, fontFamily: BODY_MED, color: c.label2, ...TEXT_FIX },
+    chipTextActive: { color: "#FFFFFF", fontFamily: BODY_SEMI },
 
     // HEADERS
     homeHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 12 },
