@@ -806,7 +806,7 @@ function AppShell() {
           <Text style={styles.emptyBody}>
             Haven syncs between two people. Pair this account to begin.
           </Text>
-          <Pressable style={styles.filledButton} onPress={logoutUser}>
+          <Pressable style={styles.filledButton} onPress={logoutUser} accessibilityRole="button">
             <Text style={styles.filledButtonText}>Sign out</Text>
           </Pressable>
         </View>
@@ -914,6 +914,7 @@ function AuthScreen() {
             <TextInput
               value={email}
               onChangeText={setEmail}
+              accessibilityLabel="Email"
               placeholder="you@example.com"
               placeholderTextColor={c.label3}
               keyboardType="email-address"
@@ -929,6 +930,7 @@ function AuthScreen() {
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
+                  accessibilityLabel="Password"
                   placeholder="Required"
                   placeholderTextColor={c.label3}
                   secureTextEntry={!showPassword}
@@ -938,7 +940,13 @@ function AuthScreen() {
                   returnKeyType="go"
                 />
               </View>
-              <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={12} style={styles.eyeButton}>
+              <Pressable
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={12}
+                style={styles.eyeButton}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              >
                 {showPassword ? <EyeOff size={19} color={c.label3} /> : <Eye size={19} color={c.label3} />}
               </Pressable>
             </View>
@@ -949,6 +957,8 @@ function AuthScreen() {
           <Pressable
             onPress={handleLogin}
             disabled={signingIn}
+            accessibilityRole="button"
+            aria-busy={signingIn}
             style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }], opacity: 0.94 }, signingIn && { opacity: 0.6 }]}
           >
             <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
@@ -1288,7 +1298,14 @@ function TabButton({ icon: Icon, label, active, dot, onPress }) {
   }, [active, pop]);
 
   return (
-    <Pressable onPress={onPress} style={styles.pillTab} hitSlop={6}>
+    <Pressable
+      onPress={onPress}
+      style={styles.pillTab}
+      hitSlop={6}
+      accessibilityRole="tab"
+      aria-selected={active}
+      accessibilityLabel={label}
+    >
       {active ? (
         <Animated.View
           style={[
@@ -1348,7 +1365,7 @@ function RailButton({ icon: Icon, label, active, dot, onPress }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
+      aria-selected={active}
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.railTab,
@@ -1433,6 +1450,7 @@ function Card({ children, style, onPress }) {
           Haptics.selectionAsync().catch(() => {});
           onPress();
         }}
+        accessibilityRole="button"
         style={({ pressed }) => [styles.card, style, pressed && { transform: [{ scale: 0.98 }], opacity: 0.94 }]}
       >
         {children}
@@ -1500,7 +1518,7 @@ function Ring({ size = 120, stroke = 12, progress = 0, trackColor, fillColor, ch
   const offset = v.interpolate({ inputRange: [0, 1], outputRange: [C, 0] });
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <Svg width={size} height={size} style={{ position: "absolute" }}>
+      <Svg width={size} height={size} style={{ position: "absolute" }} accessible={false}>
         <Circle cx={cx} cy={cx} r={r} stroke={trackColor} strokeWidth={stroke} fill="none" opacity={0.3} />
         <AnimatedCircle
           cx={cx}
@@ -1525,7 +1543,7 @@ function Segmented({ options, value, onChange }) {
   const { c } = useTheme();
   const styles = useStyles();
   return (
-    <View style={styles.segmented}>
+    <View style={styles.segmented} accessibilityRole="radiogroup">
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -1536,6 +1554,9 @@ function Segmented({ options, value, onChange }) {
               onChange(option.value);
             }}
             style={[styles.segment, active && { backgroundColor: c.tint }]}
+            accessibilityRole="radio"
+            aria-checked={active}
+            accessibilityLabel={option.label}
           >
             {option.icon ? (
               <option.icon size={14} color={active ? "#FFFFFF" : c.label2} strokeWidth={2.2} />
@@ -1559,7 +1580,7 @@ function Sheet({ visible, title, subtitle, onClose, children }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={styles.sheetBackdrop}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss sheet" />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12, maxHeight: windowHeight * 0.9 }]}>
             <View style={styles.grabber} />
@@ -1568,7 +1589,13 @@ function Sheet({ visible, title, subtitle, onClose, children }) {
                 <Text style={styles.sheetTitle}>{title}</Text>
                 {subtitle ? <Text style={styles.sheetSubtitle}>{subtitle}</Text> : null}
               </View>
-              <Pressable onPress={onClose} hitSlop={10} style={styles.sheetClose}>
+              <Pressable
+                onPress={onClose}
+                hitSlop={10}
+                style={styles.sheetClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
                 <X size={18} color={c.label2} strokeWidth={2.2} />
               </Pressable>
             </View>
@@ -1593,6 +1620,7 @@ function Fab({ label, icon: Icon = Plus, onPress }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         onPress();
       }}
+      accessibilityRole="button"
       style={({ pressed }) => [
         styles.fabWrap,
         // The pill bar is absent on wide screens, so its clearance is too —
@@ -1626,7 +1654,7 @@ function ConfettiField({ colors }) {
     return arr;
   }, [colors]);
   return (
-    <Svg width="100%" height={300} viewBox="0 0 360 300" style={{ width: "100%" }}>
+    <Svg width="100%" height={300} viewBox="0 0 360 300" style={{ width: "100%" }} accessible={false}>
       {pieces.map((p, i) => (
         <Circle key={i} cx={p.x} cy={p.y} r={4} fill={p.color} opacity={0.9} />
       ))}
@@ -1706,6 +1734,7 @@ function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0
             <View style={styles.goalFooter}>
               <Pressable
                 onPress={onDismiss}
+                accessibilityRole="button"
                 style={({ pressed }) => [styles.goalButton, pressed && { opacity: 0.88, transform: [{ scale: 0.985 }] }]}
               >
                 <Text style={styles.goalButtonText}>Keep going</Text>
@@ -1721,12 +1750,12 @@ function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0
   const sub = detail || "Extra hours burned it down.";
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
-      <Pressable style={styles.celebrateBackdrop} onPress={onDismiss}>
+      <Pressable style={styles.celebrateBackdrop} onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Dismiss celebration">
         <Animated.View style={[styles.celebrateCard, { opacity, transform: [{ scale }] }]}>
           <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.celebrateTop} />
           <ConfettiField colors={[c.tint, "#FFFFFF", c.gold, c.mint, c.rose]} />
           <View style={styles.celebrateBadge}>
-            <Award size={26} color="#FFFFFF" />
+            <Award size={26} color="#FFFFFF" accessible={false} />
           </View>
           <Text style={styles.celebrateTitle}>Backlog melting.</Text>
           <Text style={styles.celebrateSub}>{sub}</Text>
@@ -1795,14 +1824,19 @@ function LockScreen({ visible, onUnlock, timerRunning }) {
       <BlurView intensity={70} tint="dark" style={styles.lockBackdrop}>
         <View style={styles.lockCard}>
           <View style={[styles.lockGlyph, { backgroundColor: c.tintSoft }]}>
-            <Fingerprint size={34} color={c.tint} />
+            <Fingerprint size={34} color={c.tint} accessible={false} />
           </View>
           <Text style={styles.lockTitle}>Haven is locked</Text>
           <Text style={styles.lockSub}>
             {timerRunning ? "A focus timer is running — hop straight back in." : `${name}, prove it's you.`}
           </Text>
           {error ? <Text style={styles.lockError}>{error}</Text> : null}
-          <Pressable onPress={timerRunning ? onUnlock : attempt} style={({ pressed }) => [styles.lockButton, pressed && { opacity: 0.75 }]}>
+          <Pressable
+            onPress={timerRunning ? onUnlock : attempt}
+            style={({ pressed }) => [styles.lockButton, pressed && { opacity: 0.75 }]}
+            accessibilityRole="button"
+            accessibilityLabel={timerRunning ? "Continue, timer running" : "Unlock with fingerprint"}
+          >
             <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.lockButtonInner}>
               {checking ? <ActivityIndicator color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
               <Text style={styles.lockButtonText}>{timerRunning ? "Continue (timer running)" : "Unlock with fingerprint"}</Text>
@@ -1864,17 +1898,23 @@ function TestSheet({ visible, onClose, onSave }) {
       <View style={styles.group}>
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>Test</Text>
-          <TextInput value={name} onChangeText={setName} placeholder="Physics Ch. 4" placeholderTextColor={c.label3} style={styles.fieldInput} />
+          <TextInput value={name} onChangeText={setName} placeholder="Physics Ch. 4" placeholderTextColor={c.label3} accessibilityLabel="Test name" style={styles.fieldInput} />
         </View>
         <View style={styles.separatorInset} />
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>Score</Text>
-          <TextInput value={score} onChangeText={(t) => setScore(t.replace(/[^0-9.]/g, ""))} placeholder="42" placeholderTextColor={c.label3} keyboardType="decimal-pad" style={[styles.fieldInput, { textAlign: "right" }]} />
+          <TextInput value={score} onChangeText={(t) => setScore(t.replace(/[^0-9.]/g, ""))} placeholder="42" placeholderTextColor={c.label3} keyboardType="decimal-pad" accessibilityLabel="Score" style={[styles.fieldInput, { textAlign: "right" }]} />
           <Text style={styles.fieldSuffix}>/</Text>
-          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9.]/g, ""))} placeholder="50" placeholderTextColor={c.label3} keyboardType="decimal-pad" style={[styles.fieldInput, { textAlign: "right", flex: 0.5 }]} />
+          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9.]/g, ""))} placeholder="50" placeholderTextColor={c.label3} keyboardType="decimal-pad" accessibilityLabel="Total marks" style={[styles.fieldInput, { textAlign: "right", flex: 0.5 }]} />
         </View>
       </View>
-      <Pressable onPress={submit} disabled={saving} style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}>
+      <Pressable
+        onPress={submit}
+        disabled={saving}
+        accessibilityRole="button"
+        aria-busy={saving}
+        style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}
+      >
         <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save score</Text>}
         </LinearGradient>
@@ -1931,7 +1971,13 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
                   </Text>
                   <Text style={styles.affirmation}>{affirmation}</Text>
                 </View>
-                <Pressable onPress={onOpenSettings} hitSlop={8} style={({ pressed }) => pressed && { opacity: 0.6 }}>
+                <Pressable
+                  onPress={onOpenSettings}
+                  hitSlop={8}
+                  style={({ pressed }) => pressed && { opacity: 0.6 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Settings"
+                >
                   <LinearGradient colors={c.tintGradient} style={styles.avatar}>
                     <Settings2 size={19} color="#FFFFFF" strokeWidth={2.2} />
                   </LinearGradient>
@@ -1942,6 +1988,8 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
             <Rise delay={80}>
               <Pressable
                 onPress={() => onNavigate("study")}
+                accessibilityRole="button"
+                accessibilityLabel={`Today's focus, ${formatHoursShort(todayMinutes)} hours studied, open the timer`}
                 style={({ pressed }) => [styles.heroCard, pressed && { transform: [{ scale: 0.99 }], opacity: 0.96 }]}
               >
                 <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCardInner}>
@@ -2022,7 +2070,7 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
             ) : null}
 
             <Rise delay={220}>
-              <SectionHeader title="Cycle" trailing={<Pressable onPress={() => onNavigate("calendar")} hitSlop={8}><Text style={styles.link}>Open calendar</Text></Pressable>} />
+              <SectionHeader title="Cycle" trailing={<Pressable onPress={() => onNavigate("calendar")} hitSlop={8} accessibilityRole="button"><Text style={styles.link}>Open calendar</Text></Pressable>} />
               <Card style={styles.cycleCard} onPress={() => onNavigate("calendar")}>
                 <View style={styles.cycleMain}>
                   <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
@@ -2143,11 +2191,23 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
         <Rise delay={70}>
           <Card style={styles.calendarCard}>
             <View style={[styles.calendarHead, gridWidth]}>
-              <Pressable onPress={() => moveMonth(-1)} hitSlop={10} style={styles.calendarArrow}>
+              <Pressable
+                onPress={() => moveMonth(-1)}
+                hitSlop={10}
+                style={styles.calendarArrow}
+                accessibilityRole="button"
+                accessibilityLabel="Previous month"
+              >
                 <ChevronLeft size={20} color={c.tint} />
               </Pressable>
               <Text style={styles.calendarMonth}>{formatMonthYear(displayDate)}</Text>
-              <Pressable onPress={() => moveMonth(1)} hitSlop={10} style={styles.calendarArrow}>
+              <Pressable
+                onPress={() => moveMonth(1)}
+                hitSlop={10}
+                style={styles.calendarArrow}
+                accessibilityRole="button"
+                accessibilityLabel="Next month"
+              >
                 <ChevronRight size={20} color={c.tint} />
               </Pressable>
             </View>
@@ -2167,6 +2227,16 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                   <Pressable
                     key={dateKey}
                     style={[styles.day, daySize]}
+                    accessibilityRole="button"
+                    accessibilityLabel={[
+                      formatReadableDate(dateKey),
+                      isSelected ? "selected" : null,
+                      isToday ? "today" : null,
+                      isPeriod ? "period" : null,
+                      goldSet.has(dateKey) ? "gold day" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
                       setSelectedDate(dateKey);
@@ -2227,10 +2297,16 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                       {period.endDate ? ` to ${formatShortDate(period.endDate)}` : " · still going"}
                     </Text>
                   </View>
-                  <Pressable onPress={() => openSheet(period)} hitSlop={10}>
+                  <Pressable onPress={() => openSheet(period)} hitSlop={12} accessibilityRole="button">
                     <Text style={styles.link}>Edit</Text>
                   </Pressable>
-                  <Pressable onPress={() => removePeriod(period)} hitSlop={10} style={styles.deleteButton}>
+                  <Pressable
+                    onPress={() => removePeriod(period)}
+                    hitSlop={10}
+                    style={styles.deleteButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete period starting ${formatShortDate(period.startDate)}`}
+                  >
                     <Trash2 size={17} color={c.label3} />
                   </Pressable>
                 </View>
@@ -2413,14 +2489,24 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
                         <View style={[styles.glyph, { backgroundColor: c.tintSoft }]}>
                           <Timer size={17} color={c.tint} />
                         </View>
-                        <View style={{ flex: 1 }}>
+                        <View
+                          style={{ flex: 1 }}
+                          accessible
+                          accessibilityLabel={`${log.subject || "Study session"}, ${formatRelativeDate(log.date)}, ${formatDuration(log.duration)}${log.notes ? `, ${log.notes}` : ""}`}
+                        >
                           <Text style={styles.rowTitle} numberOfLines={1}>{log.subject || "Study session"}</Text>
                           <Text style={styles.rowMeta} numberOfLines={1}>
                             {formatRelativeDate(log.date)} · {formatDuration(log.duration)}
                             {log.notes ? ` · ${log.notes}` : ""}
                           </Text>
                         </View>
-                        <Pressable onPress={() => removeLog(log)} hitSlop={10} style={styles.deleteButton}>
+                        <Pressable
+                          onPress={() => removeLog(log)}
+                          hitSlop={10}
+                          style={styles.deleteButton}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${log.subject} session, ${formatDuration(log.duration)}`}
+                        >
                           <Trash2 size={17} color={c.label3} />
                         </Pressable>
                       </View>
@@ -2503,7 +2589,11 @@ function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
 
       <View style={styles.timerControls}>
         {!timer.active ? (
-          <Pressable onPress={timer.start} style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}>
+          <Pressable
+            onPress={timer.start}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}
+          >
             <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaSmall}>
               <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
               <Text style={styles.ctaTextSmall}>Start focusing</Text>
@@ -2511,17 +2601,27 @@ function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
           </Pressable>
         ) : (
           <>
-            <Pressable onPress={onDiscard} style={({ pressed }) => [styles.ghostSquare, pressed && { opacity: 0.6 }]}>
+            <Pressable
+              onPress={onDiscard}
+              style={({ pressed }) => [styles.ghostSquare, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Discard timer"
+            >
               <RotateCcw size={19} color={c.label2} />
             </Pressable>
             <Pressable
               onPress={timer.running ? timer.pause : timer.resume}
+              accessibilityRole="button"
               style={({ pressed }) => [styles.tintedButton, { flex: 1, marginTop: 0 }, pressed && { opacity: 0.7 }]}
             >
               {timer.running ? <Pause size={18} color={c.tint} fill={c.tint} /> : <Play size={18} color={c.tint} fill={c.tint} />}
               <Text style={styles.tintedButtonText}>{timer.running ? "Pause" : "Resume"}</Text>
             </Pressable>
-            <Pressable onPress={onFinish} style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}>
+            <Pressable
+              onPress={onFinish}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}
+            >
               <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaSmall}>
                 <Square size={16} color="#FFFFFF" fill="#FFFFFF" />
                 <Text style={styles.ctaTextSmall}>Log it</Text>
@@ -2696,7 +2796,7 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
         <StatRow label="This month" value={formatDuration(monthlyMinutes)} color={c.gold} />
       </Card>
 
-      <SectionHeader title="Test scores" trailing={<Pressable onPress={() => setTestOpen(true)} hitSlop={8}><Text style={styles.link}>+ Add score</Text></Pressable>} />
+      <SectionHeader title="Test scores" trailing={<Pressable onPress={() => setTestOpen(true)} hitSlop={8} accessibilityRole="button"><Text style={styles.link}>+ Add score</Text></Pressable>} />
       {testScores.length === 0 ? (
         <Card style={styles.emptyCard}>
           <View style={[styles.glyphLarge, { backgroundColor: c.tintSoft }]}>
@@ -2735,7 +2835,13 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
                     </Text>
                   </View>
                   <View style={[styles.gradeDot, { backgroundColor: g.color }]} />
-                  <Pressable onPress={() => removeTest(t)} hitSlop={10} style={styles.deleteButton}>
+                  <Pressable
+                    onPress={() => removeTest(t)}
+                    hitSlop={10}
+                    style={styles.deleteButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${t.name} score`}
+                  >
                     <Trash2 size={17} color={c.label3} />
                   </Pressable>
                 </View>
@@ -3059,13 +3165,14 @@ function NeetScreen({ coupleId }) {
                 <TextInput
                   value={scoreText}
                   onChangeText={setScoreText}
+                  accessibilityLabel="Score out of 720"
                   placeholder="Score out of 720"
                   placeholderTextColor={c.label3}
                   keyboardType="number-pad"
                   style={styles.neetScoreInput}
                   maxLength={3}
                 />
-                <Pressable style={[styles.neetLogBtn, { backgroundColor: c.tint }]} onPress={logMock}>
+                <Pressable style={[styles.neetLogBtn, { backgroundColor: c.tint }]} onPress={logMock} accessibilityRole="button">
                   <Text style={styles.neetLogBtnText}>Log mock</Text>
                 </Pressable>
               </View>
@@ -3089,6 +3196,8 @@ function NeetScreen({ coupleId }) {
                       key={m.id}
                       onPress={() => removeMock(m)}
                       style={({ pressed }) => [styles.neetMockRow, pressed && { opacity: 0.6 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete mock, ${m.name}, ${m.category}`}
                     >
                       <Text style={styles.neetMockName} numberOfLines={1}>
                         {m.name} · {m.category}
@@ -3212,7 +3321,6 @@ function NeetScreen({ coupleId }) {
                       : { backgroundColor: c.fill, borderWidth: 1, borderColor: c.separator },
                   ]}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: revisionOnly }}
                   accessibilityLabel={
                     revisionOnly
                       ? "Show the full syllabus"
@@ -3246,6 +3354,9 @@ function NeetScreen({ coupleId }) {
                       key={ch.id}
                       onPress={() => toggleChapter(ch.id)}
                       style={({ pressed }) => [styles.neetChapterRow, pressed && { opacity: 0.6 }]}
+                      accessibilityRole="checkbox"
+                      aria-checked={done}
+                      accessibilityLabel={`${ch.subject}, ${ch.chapter}, ${ch.weightage} weightage`}
                     >
                       <View style={[styles.neetCheck, done && { backgroundColor: c.tint, borderColor: c.tint }]}>
                         {done ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
@@ -3270,6 +3381,8 @@ function NeetScreen({ coupleId }) {
                 <Pressable
                   key={sub.name}
                   onPress={() => Linking.openURL(sub.url).catch(() => {})}
+                  accessibilityRole="link"
+                  accessibilityLabel={`${sub.name}, open community`}
                   style={({ pressed }) => [styles.neetSubRow, i === 0 && { paddingTop: 0 }, pressed && { opacity: 0.6 }]}
                 >
                   <View style={styles.neetSubHead}>
@@ -3351,7 +3464,7 @@ function MistakeSheet({ visible, onClose, onSave }) {
       />
 
       <SectionHeader title="Chapter" />
-      <View style={styles.chipWrap}>
+      <View style={styles.chipWrap} accessibilityRole="radiogroup">
         {chapters.map((entry) => {
           const active = entry.chapter === chapter;
           return (
@@ -3362,8 +3475,8 @@ function MistakeSheet({ visible, onClose, onSave }) {
                 setChapter(entry.chapter);
               }}
               style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
+              accessibilityRole="radio"
+              aria-checked={active}
               accessibilityLabel={entry.chapter}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>{entry.chapter}</Text>
@@ -3373,7 +3486,7 @@ function MistakeSheet({ visible, onClose, onSave }) {
       </View>
 
       <SectionHeader title="Why" />
-      <View style={styles.chipWrap}>
+      <View style={styles.chipWrap} accessibilityRole="radiogroup">
         {MISTAKE_REASONS.map((value) => {
           const active = value === reason;
           return (
@@ -3384,8 +3497,8 @@ function MistakeSheet({ visible, onClose, onSave }) {
                 setReason(value);
               }}
               style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
+              accessibilityRole="radio"
+              aria-checked={active}
               accessibilityLabel={MISTAKE_REASON_LABELS[value]}
             >
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
@@ -3402,6 +3515,7 @@ function MistakeSheet({ visible, onClose, onSave }) {
           <TextInput
             value={note}
             onChangeText={setNote}
+            accessibilityLabel="Note"
             placeholder="What went wrong? Optional"
             placeholderTextColor={c.label3}
             style={styles.fieldInput}
@@ -3489,16 +3603,23 @@ function StudySheet({ visible, prefill, onClose, onSave }) {
       <View style={styles.group}>
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>Subject</Text>
-          <TextInput value={subject} onChangeText={setSubject} placeholder="Chemistry" placeholderTextColor={c.label3} style={styles.fieldInput} />
+          <TextInput value={subject} onChangeText={setSubject} placeholder="Chemistry" placeholderTextColor={c.label3} accessibilityLabel="Subject" style={styles.fieldInput} />
         </View>
       </View>
 
       <SectionHeader title="How long" />
-      <View style={styles.presetRow}>
+      <View style={styles.presetRow} accessibilityRole="radiogroup">
         {HOUR_PRESETS.map((hours) => {
           const active = minutes === hoursToMinutes(hours);
           return (
-            <Pressable key={hours} onPress={() => applyPreset(hours)} style={[styles.preset, active && { backgroundColor: c.tint }]}>
+            <Pressable
+              key={hours}
+              onPress={() => applyPreset(hours)}
+              style={[styles.preset, active && { backgroundColor: c.tint }]}
+              accessibilityRole="radio"
+              aria-checked={active}
+              accessibilityLabel={`${hours} hours`}
+            >
               <Text style={[styles.presetText, active && { color: "#FFFFFF" }]}>{hours}h</Text>
             </Pressable>
           );
@@ -3508,19 +3629,25 @@ function StudySheet({ visible, prefill, onClose, onSave }) {
       <View style={styles.group}>
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>Exact hours</Text>
-          <TextInput value={customHours} onChangeText={applyCustom} placeholder="1.5" placeholderTextColor={c.label3} keyboardType="decimal-pad" style={[styles.fieldInput, { textAlign: "right" }]} />
+          <TextInput value={customHours} onChangeText={applyCustom} placeholder="1.5" placeholderTextColor={c.label3} keyboardType="decimal-pad" accessibilityLabel="Exact hours" style={[styles.fieldInput, { textAlign: "right" }]} />
           <Text style={styles.fieldSuffix}>h</Text>
         </View>
         <View style={styles.separatorInset} />
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>Notes</Text>
-          <TextInput value={notes} onChangeText={setNotes} placeholder="Optional" placeholderTextColor={c.label3} style={styles.fieldInput} />
+          <TextInput value={notes} onChangeText={setNotes} placeholder="Optional" placeholderTextColor={c.label3} accessibilityLabel="Notes" style={styles.fieldInput} />
         </View>
       </View>
 
       <Text style={styles.sheetHint}>Saving {formatDuration(minutes)}.</Text>
 
-      <Pressable onPress={submit} disabled={saving} style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}>
+      <Pressable
+        onPress={submit}
+        disabled={saving}
+        accessibilityRole="button"
+        aria-busy={saving}
+        style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}
+      >
         <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save session</Text>}
         </LinearGradient>
@@ -3563,13 +3690,24 @@ function DateField({ label, value, onChange, onClear, optional }) {
 
   return (
     <>
-      <Pressable style={styles.fieldRow} onPress={() => setOpen(true)}>
+      <Pressable
+        style={styles.fieldRow}
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value ? formatReadableDate(value) : "not set"}`}
+      >
         <Text style={styles.fieldLabel}>{label}</Text>
         <Text style={[styles.fieldValue, !value && { color: c.label3 }]}>
           {value ? formatReadableDate(value) : "Choose"}
         </Text>
         {optional && value ? (
-          <Pressable onPress={onClear} hitSlop={10} style={{ paddingLeft: 8 }}>
+          <Pressable
+            onPress={onClear}
+            hitSlop={10}
+            style={{ paddingLeft: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Clear ${label}`}
+          >
             <X size={16} color={c.label3} />
           </Pressable>
         ) : (
@@ -3581,7 +3719,12 @@ function DateField({ label, value, onChange, onClear, optional }) {
         <View style={styles.pickerBackdrop}>
           <View style={styles.pickerCard}>
             <Text style={styles.pickerTitle}>{label}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerStrip}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pickerStrip}
+              accessibilityRole="radiogroup"
+            >
               {MONTHS.map((monthName, index) => (
                 <Pressable
                   key={monthName}
@@ -3590,12 +3733,20 @@ function DateField({ label, value, onChange, onClear, optional }) {
                     Haptics.selectionAsync().catch(() => {});
                   }}
                   style={[styles.pickerPill, month === index && { backgroundColor: c.tint }]}
+                  accessibilityRole="radio"
+                  aria-checked={month === index}
+                  accessibilityLabel={monthName}
                 >
                   <Text style={[styles.pickerPillText, month === index && { color: "#FFFFFF" }]}>{monthName.slice(0, 3)}</Text>
                 </Pressable>
               ))}
             </ScrollView>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerStrip}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pickerStrip}
+              accessibilityRole="radiogroup"
+            >
               {years.map((y) => (
                 <Pressable
                   key={y}
@@ -3604,12 +3755,15 @@ function DateField({ label, value, onChange, onClear, optional }) {
                     Haptics.selectionAsync().catch(() => {});
                   }}
                   style={[styles.pickerPill, year === y && { backgroundColor: c.tint }]}
+                  accessibilityRole="radio"
+                  aria-checked={year === y}
+                  accessibilityLabel={String(y)}
                 >
                   <Text style={[styles.pickerPillText, year === y && { color: "#FFFFFF" }]}>{y}</Text>
                 </Pressable>
               ))}
             </ScrollView>
-            <View style={styles.pickerGrid}>
+            <View style={styles.pickerGrid} accessibilityRole="radiogroup">
               {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                 const active = Math.min(day, daysInMonth) === d;
                 return (
@@ -3620,6 +3774,9 @@ function DateField({ label, value, onChange, onClear, optional }) {
                       Haptics.selectionAsync().catch(() => {});
                     }}
                     style={[styles.pickerDay, active && { backgroundColor: c.tint }]}
+                    accessibilityRole="radio"
+                    aria-checked={active}
+                    accessibilityLabel={`${d} ${MONTHS[month]} ${year}`}
                   >
                     <Text style={[styles.pickerDayText, active && { color: "#FFFFFF", fontFamily: BODY_SEMI }]}>{d}</Text>
                   </Pressable>
@@ -3627,10 +3784,10 @@ function DateField({ label, value, onChange, onClear, optional }) {
               })}
             </View>
             <View style={styles.pickerActions}>
-              <Pressable onPress={() => setOpen(false)} style={[styles.ghostButton, { flex: 1 }]}>
+              <Pressable onPress={() => setOpen(false)} style={[styles.ghostButton, { flex: 1 }]} accessibilityRole="button">
                 <Text style={styles.ghostButtonText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={confirm} style={[styles.ctaWrap, { flex: 1 }]}>
+              <Pressable onPress={confirm} style={[styles.ctaWrap, { flex: 1 }]} accessibilityRole="button">
                 <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaSmall}>
                   <Text style={styles.ctaTextSmall}>Done</Text>
                 </LinearGradient>
@@ -3676,7 +3833,13 @@ function PeriodSheet({ visible, period, onClose, onSave }) {
         <View style={styles.separatorInset} />
         <DateField label="Ends" value={endDate} onChange={setEndDate} onClear={() => setEndDate("")} optional />
       </View>
-      <Pressable onPress={submit} disabled={saving} style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}>
+      <Pressable
+        onPress={submit}
+        disabled={saving}
+        accessibilityRole="button"
+        aria-busy={saving}
+        style={({ pressed }) => [styles.ctaWrap, pressed && { transform: [{ scale: 0.98 }] }]}
+      >
         <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save period</Text>}
         </LinearGradient>
@@ -3744,8 +3907,15 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
     </View>
   );
 
-  const Toggle = ({ on, onPress }) => (
-    <Pressable onPress={onPress} hitSlop={8} style={[styles.toggle, on && { backgroundColor: c.tint }]}>
+  const Toggle = ({ on, onPress, label }) => (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={[styles.toggle, on && { backgroundColor: c.tint }]}
+      accessibilityRole="switch"
+      aria-checked={on}
+      accessibilityLabel={label}
+    >
       <View style={[styles.toggleKnob, on && { alignSelf: "flex-end", backgroundColor: "#fff" }]} />
     </Pressable>
   );
@@ -3764,6 +3934,7 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
           <TextInput
             value={nameDraft}
             onChangeText={setNameDraft}
+            accessibilityLabel="Greeting name"
             onBlur={() => updatePrefs({ displayName: nameDraft.trim() || "Chaaru" })}
             placeholder="Chaaru"
             placeholderTextColor={c.label3}
@@ -3776,6 +3947,7 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
           <TextInput
             value={affirmDraft}
             onChangeText={setAffirmDraft}
+            accessibilityLabel="Affirmation"
             onBlur={() => updatePrefs({ affirmation: affirmDraft.trim() || DEFAULT_PREFS.affirmation })}
             placeholder={DEFAULT_PREFS.affirmation}
             placeholderTextColor={c.label3}
@@ -3797,7 +3969,7 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
         ]}
       />
       <Text style={styles.sheetHint}>Accent theme</Text>
-      <View style={styles.accentRow}>
+      <View style={styles.accentRow} accessibilityRole="radiogroup">
         {ACCENT_OPTIONS.map((a) => {
           const active = prefs.accent === a.value;
           const dot = (ACCENTS[a.value]?.tintGradient?.dark || ["#ccc"])[1];
@@ -3805,7 +3977,11 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
             <Pressable
               key={a.value}
               onPress={() => updatePrefs({ accent: a.value })}
+              hitSlop={6}
               style={[styles.accentChip, active && { borderColor: c.tint, backgroundColor: c.tintSoft }]}
+              accessibilityRole="radio"
+              aria-checked={active}
+              accessibilityLabel={`${a.label} accent`}
             >
               <View style={[styles.accentDot, { backgroundColor: dot }]} />
               <Text style={[styles.accentLabel, active && { color: c.tint, fontFamily: BODY_SEMI }]}>{a.label}</Text>
@@ -3819,17 +3995,24 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
         <>
           <SectionHeader title="Reminders" />
           <Card>
-            <SettingRow icon={Moon} tint={c.tintSoft} title="Wind-down · 2:00 AM daily" sub="Today's hours + backlog + goodnight" right={<Toggle on={prefs.windDownEnabled} onPress={() => toggleNotifs("windDownEnabled")} />} />
+            <SettingRow icon={Moon} tint={c.tintSoft} title="Wind-down · 2:00 AM daily" sub="Today's hours + backlog + goodnight" right={<Toggle label="Wind-down reminders" on={prefs.windDownEnabled} onPress={() => toggleNotifs("windDownEnabled")} />} />
             <View style={styles.separatorInset} />
-            <SettingRow icon={BarChart3} tint={c.goldSoft} title="Weekly report · Sun 8 PM" sub="Week total, goal progress, backlog change" right={<Toggle on={prefs.weeklyReportEnabled} onPress={() => toggleNotifs("weeklyReportEnabled")} />} />
+            <SettingRow icon={BarChart3} tint={c.goldSoft} title="Weekly report · Sun 8 PM" sub="Week total, goal progress, backlog change" right={<Toggle label="Weekly report" on={prefs.weeklyReportEnabled} onPress={() => toggleNotifs("weeklyReportEnabled")} />} />
           </Card>
           <Text style={styles.sheetHint}>Wind-down becomes a pure goodnight once 8h is done.</Text>
 
           <SectionHeader title="Privacy" />
           <Card>
-            <SettingRow icon={Fingerprint} tint={c.mintSoft} title="Fingerprint lock" sub={prefs.lockEnabled ? "On — timer sessions bypass it" : "Off"} right={<Toggle on={prefs.lockEnabled} onPress={() => updatePrefs({ lockEnabled: !prefs.lockEnabled })} />} />
+            <SettingRow icon={Fingerprint} tint={c.mintSoft} title="Fingerprint lock" sub={prefs.lockEnabled ? "On — timer sessions bypass it" : "Off"} right={<Toggle label="Fingerprint lock" on={prefs.lockEnabled} onPress={() => updatePrefs({ lockEnabled: !prefs.lockEnabled })} />} />
             <View style={styles.separatorInset} />
-            <Pressable onPress={() => { onClose(); setTimeout(() => onLockNow?.(), 300); }} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+            <Pressable
+              onPress={() => {
+                onClose();
+                setTimeout(() => onLockNow?.(), 300);
+              }}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+            >
               <View style={[styles.glyph, { backgroundColor: c.fill }]}>
                 <ShieldCheck size={17} color={c.label2} />
               </View>
@@ -3842,7 +4025,7 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
 
       <SectionHeader title="Account" />
       <Card>
-        <Pressable onPress={signOut} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+        <Pressable onPress={signOut} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} accessibilityRole="button">
           <View style={[styles.glyph, { backgroundColor: c.redSoft }]}>
             <LogOut size={17} color={c.red} />
           </View>
