@@ -121,6 +121,7 @@ import {
     SYLLABUS,
     computeMockResult,
     deleteMock,
+    dueChapters,
     getSyllabusProgress,
     getMocks,
     saveMock,
@@ -2878,8 +2879,12 @@ function NeetScreen({ coupleId }) {
   const toggleChapter = (chapterId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setSyllabusState((prev) => {
-      const checks = { ...prev.checks, [chapterId]: !prev.checks[chapterId] };
-      const checked = Object.values(checks).filter(Boolean).length;
+      const checks = { ...prev.checks };
+      // Unchecking deletes the entry; checking stamps the date the revision
+      // clock counts from.
+      if (checks[chapterId]) delete checks[chapterId];
+      else checks[chapterId] = { done: true, at: new Date().toISOString() };
+      const checked = Object.keys(checks).length;
       return {
         ...prev,
         checks,
@@ -2891,6 +2896,19 @@ function NeetScreen({ coupleId }) {
   };
 
   const subjectChapters = SYLLABUS.filter((ch) => ch.subject === openSubject);
+
+  // --- revision due ---
+  const [revisionOnly, setRevisionOnly] = useState(false);
+  const dueRevision = useMemo(
+    () => dueChapters(syllabusState.checks, now),
+    [syllabusState.checks, now],
+  );
+
+  // Re-checking the last due chapter leaves the filter with nothing to show, so
+  // drop back to the full syllabus instead of an empty card.
+  useEffect(() => {
+    if (revisionOnly && dueRevision.length === 0) setRevisionOnly(false);
+  }, [revisionOnly, dueRevision.length]);
 
   // --- mistake log ---
   const [mistakes, setMistakes] = useState([]);
@@ -3157,13 +3175,46 @@ function NeetScreen({ coupleId }) {
               trailing={<Text style={styles.neetProgress}>{syllabusState.percent}% covered</Text>}
             />
             <Card style={{ padding: 20 }}>
-              <Segmented
-                options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
-                value={openSubject}
-                onChange={setOpenSubject}
-              />
-              <View style={{ marginTop: 8 }}>
-                {subjectChapters.map((ch) => {
+              {dueRevision.length ? (
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setRevisionOnly((value) => !value);
+                  }}
+                  style={[
+                    styles.revisionPill,
+                    revisionOnly
+                      ? { backgroundColor: c.tint }
+                      : { backgroundColor: c.fill, borderWidth: 1, borderColor: c.separator },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: revisionOnly }}
+                  accessibilityLabel={
+                    revisionOnly
+                      ? "Show the full syllabus"
+                      : `Show the ${dueRevision.length} chapters due for revision`
+                  }
+                >
+                  <RotateCcw size={13} color={revisionOnly ? "#FFFFFF" : c.gold} strokeWidth={2.4} />
+                  <Text
+                    style={[styles.revisionPillText, { color: revisionOnly ? "#FFFFFF" : c.label }]}
+                  >
+                    {revisionOnly
+                      ? `Showing ${dueRevision.length} due`
+                      : `${dueRevision.length} due for revision`}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {revisionOnly ? null : (
+                <Segmented
+                  options={NEET_SUBJECTS.map((s) => ({ value: s, label: s }))}
+                  value={openSubject}
+                  onChange={setOpenSubject}
+                />
+              )}
+              <View style={{ marginTop: revisionOnly ? 0 : 8 }}>
+                {(revisionOnly ? dueRevision : subjectChapters).map((ch) => {
                   const done = Boolean(syllabusState.checks[ch.id]);
                   const wColor = ch.weightage === "High" ? c.mint : ch.weightage === "Medium" ? c.gold : c.label3;
                   return (
@@ -3175,7 +3226,8 @@ function NeetScreen({ coupleId }) {
                       <View style={[styles.neetCheck, done && { backgroundColor: c.tint, borderColor: c.tint }]}>
                         {done ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
                       </View>
-                      <Text style={[styles.neetChapterName, done && { color: c.label3, textDecorationLine: "line-through" }]} numberOfLines={1}>
+                      <Text style={[styles.neetChapterName, done && !revisionOnly && { color: c.label3, textDecorationLine: "line-through" }]} numberOfLines={1}>
+                        {revisionOnly ? <Text style={{ color: c.label3 }}>{ch.subject} · </Text> : null}
                         {ch.chapter}
                       </Text>
                       <View style={[styles.neetWeight, { backgroundColor: c.fill }]}>
@@ -3948,6 +4000,17 @@ const makeStyles = (c) =>
     },
     chipText: { fontSize: 14, lineHeight: 19, fontFamily: BODY_MED, color: c.label2, ...TEXT_FIX },
     chipTextActive: { color: "#FFFFFF", fontFamily: BODY_SEMI },
+    revisionPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+      minHeight: 40,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      marginBottom: 12,
+    },
+    revisionPillText: { fontSize: 13, lineHeight: 18, fontFamily: BODY_SEMI, ...TEXT_FIX },
 
     // HEADERS
     homeHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, gap: 12 },

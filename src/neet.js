@@ -264,13 +264,52 @@ function formatTimeAgo(createdUtc) {
 
 const SYLLABUS_KEY_PREFIX = 'haven-syllabus-';
 
+// How long a chapter stays fresh, by exam weightage. Revision is due once the
+// elapsed time since the last check-off reaches the interval.
+export const REVISION_DAYS = { High: 7, Medium: 14, Low: 30 };
+
+// Checks used to be a bare `true`. They are now `{ done: true, at: ISO }`, and
+// the date is what makes a chapter eligible for revision. Legacy booleans keep
+// counting toward progress but never become "due" — there is no date to count
+// from, and inventing one would resurface every old chapter at once.
+export function normalizeChecks(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const checks = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!value) continue;
+    if (value === true) {
+      checks[id] = { done: true, at: null };
+      continue;
+    }
+    if (typeof value !== 'object') continue;
+    if (value.done === false) continue;
+    checks[id] = { done: true, at: typeof value.at === 'string' ? value.at : null };
+  }
+  return checks;
+}
+
+export function dueChapters(checks, now = Date.now()) {
+  const normalized = normalizeChecks(checks);
+
+  return SYLLABUS.filter((entry) => {
+    const check = normalized[entry.id];
+    if (!check || !check.at) return false;
+    const interval = REVISION_DAYS[entry.weightage];
+    if (!interval) return false;
+    const checkedAt = Date.parse(check.at);
+    if (!Number.isFinite(checkedAt)) return false;
+    return now - checkedAt >= interval * 86400000;
+  });
+}
+
 export async function getSyllabusProgress(coupleId) {
   try {
     const key = SYLLABUS_KEY_PREFIX + coupleId;
     const stored = await AsyncStorage.getItem(key);
-    const checks = stored ? JSON.parse(stored) : {};
+    const checks = normalizeChecks(stored ? JSON.parse(stored) : {});
     const total = SYLLABUS.length;
-    const checked = Object.values(checks).filter(Boolean).length;
+    const checked = Object.keys(checks).length;
     return { total, checked, percent: total > 0 ? Math.round((checked / total) * 100) : 0, checks };
   } catch {
     return { total: SYLLABUS.length, checked: 0, percent: 0, checks: {} };
@@ -281,10 +320,21 @@ export async function toggleSyllabusChapter(coupleId, chapterId) {
   try {
     const key = SYLLABUS_KEY_PREFIX + coupleId;
     const stored = await AsyncStorage.getItem(key);
-    const checks = stored ? JSON.parse(stored) : {};
-    checks[chapterId] = !checks[chapterId];
+    const checks = normalizeChecks(stored ? JSON.parse(stored) : {});
+
+    if (checks[chapterId]) {
+      // Unchecking deletes the key; a stored `false` would still read as truthy
+      // to the old `filter(Boolean)` count.
+      delete checks[chapterId];
+      await AsyncStorage.setItem(key, JSON.stringify(checks));
+      return false;
+    }
+
+    // Re-checking a due chapter stamps it now, which is what removes it from
+    // the revision list.
+    checks[chapterId] = { done: true, at: new Date().toISOString() };
     await AsyncStorage.setItem(key, JSON.stringify(checks));
-    return checks[chapterId];
+    return true;
   } catch {
     return false;
   }
