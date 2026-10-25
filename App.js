@@ -2097,7 +2097,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
 
         <Rise delay={70}>
           <Card style={styles.calendarCard}>
-            <View style={styles.calendarHead}>
+            <View style={[styles.calendarHead, gridWidth]}>
               <Pressable onPress={() => moveMonth(-1)} hitSlop={10} style={styles.calendarArrow}>
                 <ChevronLeft size={20} color={c.tint} />
               </Pressable>
@@ -2144,7 +2144,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                 );
               })}
             </View>
-            <View style={styles.legend}>
+            <View style={[styles.legend, gridWidth]}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: c.rose }]} />
                 <Text style={styles.legendText}>Period</Text>
