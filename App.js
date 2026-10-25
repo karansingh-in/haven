@@ -1177,11 +1177,16 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 function TabButton({ icon: Icon, label, active, dot, onPress }) {
   const { c } = useTheme();
   const styles = useStyles();
+  const reduceMotion = useReducedMotion();
   const pop = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      pop.setValue(active ? 1 : 0);
+      return;
+    }
     Animated.spring(pop, { toValue: active ? 1 : 0, useNativeDriver: true, damping: 12, stiffness: 220 }).start();
-  }, [active, pop]);
+  }, [active, pop, reduceMotion]);
 
   return (
     <Pressable
@@ -1275,8 +1280,14 @@ function RailButton({ icon: Icon, label, active, dot, onPress }) {
 // ============================================================
 
 function Rise({ children, delay = 0, style }) {
-  const a = useRef(new Animated.Value(0)).current;
+  // Honour Reduce Motion: no entrance animation at all, content simply present.
+  const reduceMotion = useReducedMotion();
+  const a = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
   useEffect(() => {
+    if (reduceMotion) {
+      a.setValue(1);
+      return undefined;
+    }
     const t = Animated.timing(a, {
       toValue: 1,
       duration: 480,
@@ -1286,7 +1297,8 @@ function Rise({ children, delay = 0, style }) {
     });
     t.start();
     return () => t.stop();
-  }, [a, delay]);
+  }, [a, delay, reduceMotion]);
+  if (reduceMotion) return <View style={style}>{children}</View>;
   return (
     <Animated.View
       style={[style, { opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}
@@ -1389,15 +1401,22 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 function Ring({ size = 120, stroke = 12, progress = 0, trackColor, fillColor, children }) {
   const v = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
   const target = Math.max(0, Math.min(1, progress || 0));
   useEffect(() => {
-    Animated.timing(v, {
+    if (reduceMotion) {
+      v.setValue(target);
+      return undefined;
+    }
+    const animation = Animated.timing(v, {
       toValue: target,
       duration: 750,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-    }).start();
-  }, [target, v]);
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [target, v, reduceMotion]);
   const r = (size - stroke) / 2;
   const cx = size / 2;
   const C = 2 * Math.PI * r;
@@ -1639,7 +1658,7 @@ function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0
       <Pressable style={styles.celebrateBackdrop} onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Dismiss celebration">
         <Animated.View style={[styles.celebrateCard, { opacity, transform: [{ scale }] }]}>
           <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.celebrateTop} />
-          <ConfettiField colors={[c.tint, "#FFFFFF", c.gold, c.mint, c.rose]} />
+          {reduceMotion ? null : <ConfettiField colors={[c.tint, "#FFFFFF", c.gold, c.mint, c.rose]} />}
           <View style={styles.celebrateBadge}>
             <Award size={26} color="#FFFFFF" accessible={false} />
           </View>
@@ -2046,20 +2065,17 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
   };
 
   const removePeriod = (period) => {
-    Alert.alert("Delete this period?", "It'll be removed from your history.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await updateCouplePeriods(coupleId, periods.filter((p) => p.id !== period.id));
-          } catch {
-            Alert.alert("Not deleted", "Check your connection and try again.");
-          }
-        },
+    confirmDestructive({
+      title: "Delete this period?",
+      message: "It'll be removed from your history.",
+      onConfirm: async () => {
+        try {
+          await updateCouplePeriods(coupleId, periods.filter((p) => p.id !== period.id));
+        } catch {
+          Alert.alert("Not deleted", "Check your connection and try again.");
+        }
       },
-    ]);
+    });
   };
 
   return (
@@ -2256,10 +2272,12 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   };
 
   const discardTimer = () => {
-    Alert.alert("Discard this timer?", "The elapsed time won't be saved.", [
-      { text: "Keep it", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: timer.reset },
-    ]);
+    confirmDestructive({
+      title: "Discard this timer?",
+      message: "The elapsed time won't be saved.",
+      confirmLabel: "Discard",
+      onConfirm: timer.reset,
+    });
   };
 
   const handleSave = async ({ subject, minutes, notes }) => {
@@ -2278,21 +2296,18 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   };
 
   const removeLog = (log) => {
-    Alert.alert("Delete this session?", `${log.subject || "Study session"} · ${formatDuration(log.duration)}`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await deleteStudySession(coupleId, log.timestamp);
-          } catch {
-            Alert.alert("Not deleted", "Check your connection and try again.");
-          }
-        },
+    confirmDestructive({
+      title: "Delete this session?",
+      message: `${log.subject || "Study session"} · ${formatDuration(log.duration)}`,
+      onConfirm: async () => {
+        try {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await deleteStudySession(coupleId, log.timestamp);
+        } catch {
+          Alert.alert("Not deleted", "Check your connection and try again.");
+        }
       },
-    ]);
+    });
   };
 
   return (
@@ -2589,20 +2604,17 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [] }
     : null;
 
   const removeTest = (entry) => {
-    Alert.alert("Delete this score?", `${entry.name} · ${entry.score}/${entry.total}`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteTestScore(coupleId, entry.timestamp);
-          } catch {
-            Alert.alert("Not deleted", "Check your connection and try again.");
-          }
-        },
+    confirmDestructive({
+      title: "Delete this score?",
+      message: `${entry.name} · ${entry.score}/${entry.total}`,
+      onConfirm: async () => {
+        try {
+          await deleteTestScore(coupleId, entry.timestamp);
+        } catch {
+          Alert.alert("Not deleted", "Check your connection and try again.");
+        }
       },
-    ]);
+    });
   };
 
   return (
@@ -2860,18 +2872,15 @@ function NeetScreen({ coupleId }) {
   };
 
   const removeMock = (entry) => {
-    Alert.alert("Delete this mock?", `${entry.name} · ${entry.category}`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await deleteMock(coupleId, entry.id);
-          setMocks((prev) => prev.filter((m) => m.id !== entry.id));
-          if (mockResult && entry.score === mockResult.score) setMockResult(null);
-        },
+    confirmDestructive({
+      title: "Delete this mock?",
+      message: `${entry.name} · ${entry.category}`,
+      onConfirm: async () => {
+        await deleteMock(coupleId, entry.id);
+        setMocks((prev) => prev.filter((m) => m.id !== entry.id));
+        if (mockResult && entry.score === mockResult.score) setMockResult(null);
       },
-    ]);
+    });
   };
 
   const latestMock = mocks.length ? mocks[0] : null;

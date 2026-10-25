@@ -32,6 +32,22 @@
         flex: 1;
       }
     </style>
+    <!--
+      react-native-web renders every Pressable as a div and never draws a focus
+      ring, which leaves keyboard users (and iPadOS with a hardware keyboard)
+      with no idea where they are. One visible ring, system blue, for every
+      control.
+    -->
+    <style id="haven-focus">
+      :focus-visible {
+        outline: 3px solid #0a84ff;
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+      :focus:not(:focus-visible) {
+        outline: none;
+      }
+    </style>
   </head>
 
   <body>

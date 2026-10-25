@@ -11,11 +11,11 @@ export const ACCENTS = {
     },
   },
   green: {
-    tint: { light: "#34C759", dark: "#30D158" },
+    tint: { light: "#2C9C4A", dark: "#27A347" },
     tintSoft: { light: "rgba(52,199,89,0.12)", dark: "rgba(48,209,88,0.16)" },
     tintGradient: {
-      light: ["#34C759", "#34C759"],
-      dark: ["#30D158", "#30D158"],
+      light: ["#2C9C4A", "#2C9C4A"],
+      dark: ["#27A347", "#27A347"],
     },
   },
   indigo: {
@@ -27,11 +27,11 @@ export const ACCENTS = {
     },
   },
   orange: {
-    tint: { light: "#FF9500", dark: "#FF9F0A" },
+    tint: { light: "#CE7200", dark: "#D07800" },
     tintSoft: { light: "rgba(255,149,0,0.12)", dark: "rgba(255,159,10,0.16)" },
     tintGradient: {
-      light: ["#FF9500", "#FF9500"],
-      dark: ["#FF9F0A", "#FF9F0A"],
+      light: ["#CE7200", "#CE7200"],
+      dark: ["#D07800", "#D07800"],
     },
   },
 };
@@ -64,8 +64,8 @@ export const LIGHT = {
   fillStrong: "rgba(60,60,67,0.15)",
   separator: "rgba(60,60,67,0.29)",
   label: "#000000",
-  label2: "rgba(60,60,67,0.60)",
-  label3: "rgba(60,60,67,0.30)",
+  label2: "rgba(60,60,67,0.75)",
+  label3: "rgba(60,60,67,0.58)",
   tint: "#007AFF",
   tintSoft: "rgba(0,122,255,0.12)",
   tintGradient: ["#007AFF", "#007AFF"],
@@ -95,7 +95,7 @@ export const DARK = {
   separator: "rgba(84,84,88,0.50)",
   label: "#FFFFFF",
   label2: "rgba(235,235,245,0.60)",
-  label3: "rgba(235,235,245,0.30)",
+  label3: "rgba(235,235,245,0.40)",
   tint: "#0A84FF",
   tintSoft: "rgba(10,132,255,0.16)",
   tintGradient: ["#0A84FF", "#0A84FF"],
