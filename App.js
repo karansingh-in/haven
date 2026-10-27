@@ -372,12 +372,9 @@ const formatClock = (ms) => {
 const SYMPTOMS = [
   { id: "cramps", label: "Cramps" },
   { id: "headache", label: "Headache" },
-  { id: "bloating", label: "Bloating" },
-  { id: "skin", label: "Skin" },
-  { id: "back", label: "Back" },
+  { id: "gas", label: "Gas" },
+  { id: "tensed", label: "Tensed" },
   { id: "tired", label: "Tired" },
-  { id: "low", label: "Low" },
-  { id: "hungry", label: "Hungry" },
 ];
 
 const PHASE_LABEL = {
@@ -388,6 +385,37 @@ const PHASE_LABEL = {
   pms: "PMS",
   late: "Late",
   unknown: "",
+};
+
+// One wording for the cycle card, so Home and Calendar never drift apart.
+const cycleCopy = (cycle) => {
+  if (!cycle || cycle.status === "none") {
+    return {
+      title: "Your cycle",
+      body: "Log a period and Haven starts predicting the next one.",
+    };
+  }
+  if (cycle.lateDays > 0) {
+    return {
+      title: `Period is ${cycle.lateDays} ${cycle.lateDays === 1 ? "day" : "days"} late`,
+      body: `Expected ${formatShortDate(cycle.nextStart)}. Bodies are not clocks - log it when it starts.`,
+    };
+  }
+  if (cycle.status === "learning") {
+    return {
+      title: `Day ${cycle.cycleDay} of your cycle`,
+      body: "One more period logged and predictions begin.",
+    };
+  }
+  const title =
+    cycle.daysUntil === 0
+      ? "Period expected today"
+      : `Period in ${cycle.daysUntil} ${cycle.daysUntil === 1 ? "day" : "days"}`;
+  const body =
+    cycle.confidence === "low"
+      ? `Recent cycles ran ${cycle.shortest}-${cycle.longest} days, so expect it between ${formatShortDate(cycle.predictedStart)} and ${formatShortDate(cycle.predictedEnd)}.`
+      : `${PHASE_LABEL[cycle.phase] || "Day " + cycle.cycleDay} \u00b7 around ${formatShortDate(cycle.nextStart)}${cycle.phase === "pms" ? ` \u00b7 PMS ${formatShortDate(cycle.pmsStart)}-${formatShortDate(cycle.pmsEnd)}` : ""}`;
+  return { title, body };
 };
 
 // ============================================================
@@ -1862,11 +1890,8 @@ function HomeScreen({ coupleData, timer, backlog, streak, goalMinutes = DAILY_GO
   const today = getTodayKey();
 
   const periods = normalizePeriods(coupleData.periods);
-  const latestPeriod = periods.length ? periods[periods.length - 1] : null;
-  const cycleStats = calculateCycleStats(periods);
-  const cycleDay = latestPeriod
-    ? Math.max(1, getDaysBetween(parseDateKey(latestPeriod.startDate), new Date()) + 1)
-    : null;
+  const cycle = useMemo(() => cycleSummary(periods, today), [periods, today]);
+  const { title: cycleTitle, body: cycleBody } = cycleCopy(cycle);
 
   const todayLogs = coupleData.studyLogs?.filter((log) => log?.date === today) || [];
   const todayMinutes = todayLogs.reduce((sum, log) => sum + (Number(log.duration) || 0), 0);
@@ -2005,13 +2030,11 @@ function HomeScreen({ coupleData, timer, backlog, streak, goalMinutes = DAILY_GO
                     <Heart size={23} color={c.rose} fill={c.rose} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cycleLabel}>{cycleDay ? `Cycle day ${cycleDay}` : "Cycle not started"}</Text>
-                    <Text style={styles.cycleSubtext}>
-                      {latestPeriod ? `Started ${formatReadableDate(latestPeriod.startDate)}` : "Log your first period to begin."}
-                    </Text>
+                    <Text style={styles.cycleLabel}>{cycleTitle}</Text>
+                    <Text style={styles.cycleSubtext}>{cycleBody}</Text>
                   </View>
                   <View style={styles.cycleAvg}>
-                    <Text style={styles.cycleAvgValue}>{cycleStats.average ? `${cycleStats.average}d` : "—"}</Text>
+                    <Text style={styles.cycleAvgValue}>{cycle.average ? `${cycle.average}d` : "—"}</Text>
                     <Text style={styles.cycleAvgLabel}>AVG</Text>
                   </View>
                 </View>
@@ -2138,27 +2161,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAI
     });
   };
 
-  const cycleTitle =
-    cycle.status === "none"
-      ? "Your cycle"
-      : cycle.lateDays > 0
-        ? `Period is ${cycle.lateDays} ${cycle.lateDays === 1 ? "day" : "days"} late`
-        : cycle.status === "learning"
-          ? `Day ${cycle.cycleDay} of your cycle`
-          : cycle.daysUntil === 0
-            ? "Period expected today"
-            : `Period in ${cycle.daysUntil} ${cycle.daysUntil === 1 ? "day" : "days"}`;
-
-  const cycleBody =
-    cycle.status === "none"
-      ? "Log a period and Haven starts predicting the next one."
-      : cycle.status === "learning"
-        ? "One more period logged and predictions begin."
-        : cycle.lateDays > 0
-          ? `Expected ${formatShortDate(cycle.nextStart)}. Bodies are not clocks - log it when it starts.`
-          : cycle.confidence === "low"
-            ? `Recent cycles ran ${cycle.shortest}-${cycle.longest} days, so expect it between ${formatShortDate(cycle.predictedStart)} and ${formatShortDate(cycle.predictedEnd)}.`
-            : `${PHASE_LABEL[cycle.phase] || "Day " + cycle.cycleDay} · around ${formatShortDate(cycle.nextStart)}${cycle.phase === "pms" ? ` · PMS ${formatShortDate(cycle.pmsStart)}-${formatShortDate(cycle.pmsEnd)}` : ""}`;
+  const { title: cycleTitle, body: cycleBody } = cycleCopy(cycle);
 
   return (
     <>
@@ -2172,7 +2175,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAI
           </View>
         </Rise>
 
-        <Rise delay={40}>
+        <Rise delay={40} style={{ marginBottom: 14 }}>
           <Card style={styles.cycleCard}>
             <View style={styles.cycleMain}>
               <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
