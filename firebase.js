@@ -11,6 +11,7 @@ import { getFirestore } from "firebase/firestore";
 
 import {
   arrayUnion,
+  deleteField,
   doc,
   getDoc,
   onSnapshot,
@@ -127,6 +128,21 @@ export const updateCouplePeriods = async (coupleId, periods) => {
 
   await updateDoc(coupleRef, {
     periods,
+  });
+};
+
+// --------------------------------------------------
+// SYMPTOMS
+// --------------------------------------------------
+
+// One dotted field per day, so a tap never rewrites the whole map. An empty
+// selection deletes the field instead of leaving a `[]` behind.
+export const updateCoupleSymptoms = async (coupleId, dayKey, ids) => {
+  const coupleRef = doc(db, "couples", coupleId);
+  const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+
+  await updateDoc(coupleRef, {
+    [`symptoms.${dayKey}`]: list.length ? list : deleteField(),
   });
 };
 

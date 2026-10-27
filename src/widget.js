@@ -1,6 +1,6 @@
 // Firestore's `widgets/{coupleId}` document is world-readable so the Scriptable
 // widget can fetch it without credentials. This module is that document's
-// allow-list: six fields, numbers clamped and rounded, and at most the last
+// allow-list: seven fields, numbers clamped and rounded, and at most the last
 // thirty gold-day keys. Nothing else may reach the network.
 
 const GOLD_DAY_CAP = 30;
@@ -22,11 +22,12 @@ const goldDayKeys = (value) => {
 };
 
 export function buildWidgetPayload(
-  { todayMinutes, streak, balanceMinutes, daysLeft, goldDays } = {},
+  { todayMinutes, goalMinutes, streak, balanceMinutes, daysLeft, goldDays } = {},
   now = Date.now(),
 ) {
   return {
     todayMinutes: count(todayMinutes),
+    goalMinutes: count(goalMinutes),
     streak: count(streak),
     backlogMinutes: count(balanceMinutes),
     daysLeft: count(daysLeft),

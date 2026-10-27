@@ -1,20 +1,22 @@
 // The widget document is public-read in Firestore, so this payload is the only
-// data a stranger can see. Pin its exact shape: six fields, nothing else.
+// data a stranger can see. Pin its exact shape: seven fields, nothing else.
 
 import { buildWidgetPayload } from '../src/widget';
 
 const input = {
   todayMinutes: 185,
+  goalMinutes: 480,
   streak: 12,
   balanceMinutes: 340,
   daysLeft: 176,
   goldDays: ['2026-10-20', '2026-10-22'],
 };
 
-test('maps the six summary fields', () => {
+test('maps the seven summary fields', () => {
   const out = buildWidgetPayload(input, 1700000000000);
   expect(out).toEqual({
     todayMinutes: 185,
+    goalMinutes: 480,
     streak: 12,
     backlogMinutes: 340,
     daysLeft: 176,
@@ -23,10 +25,11 @@ test('maps the six summary fields', () => {
   });
 });
 
-test('publishes exactly six fields', () => {
+test('publishes exactly seven fields', () => {
   expect(Object.keys(buildWidgetPayload(input, 0)).sort()).toEqual([
     'backlogMinutes',
     'daysLeft',
+    'goalMinutes',
     'goldDays',
     'streak',
     'todayMinutes',
@@ -99,6 +102,7 @@ test('tolerates a missing argument', () => {
   const out = buildWidgetPayload(undefined, 42);
   expect(out).toEqual({
     todayMinutes: 0,
+    goalMinutes: 0,
     streak: 0,
     backlogMinutes: 0,
     daysLeft: 0,

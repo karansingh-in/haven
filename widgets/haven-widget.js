@@ -9,7 +9,14 @@ const API_KEY = "AIzaSyBbuYKVg4uzaBs-DdVUmMgMKa9IjrwQUh0";
 const COUPLE_ID = ""; // Firestore -> users -> your doc -> coupleId
 
 const APP_URL = "https://karansingh-in.github.io/haven/";
-const DESTINATION = 480; // the 8-hour day, in minutes
+const DEFAULT_GOAL = 480; // 8 hours, until the app publishes the real goal
+
+// 480 -> "8h", 390 -> "6h30", 780 -> "13h".
+const formatGoal = (minutes) => {
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+  return rest ? `${hours}h${String(rest).padStart(2, "0")}` : `${hours}h`;
+};
 
 const BG = new Color("#0B1220");
 const WHITE = new Color("#FFFFFF");
@@ -193,9 +200,12 @@ function buildWidget(summary, family) {
   big.minimumScaleFactor = 0.6;
   big.lineLimit = 1;
 
-  const remaining = DESTINATION - summary.todayMinutes;
+  const goalMinutes = summary.goalMinutes > 0 ? summary.goalMinutes : DEFAULT_GOAL;
+  const remaining = goalMinutes - summary.todayMinutes;
   const goalText =
-    remaining > 0 ? `8h goal · ${formatHM(remaining)} to go` : "8h goal · met";
+    remaining > 0
+      ? `${formatGoal(goalMinutes)} goal · ${formatHM(remaining)} to go`
+      : `${formatGoal(goalMinutes)} goal · met`;
   const goal = left.addText(goalText);
   goal.font = Font.mediumRoundedSystemFont(11);
   goal.textColor = remaining > 0 ? DIM : new Color("#5AC8A8");
@@ -206,7 +216,7 @@ function buildWidget(summary, family) {
 
   const barWidth = medium ? 186 : 104;
   const bar = left.addImage(
-    drawBar(summary.todayMinutes / DESTINATION, barWidth),
+    drawBar(summary.todayMinutes / goalMinutes, barWidth),
   );
   bar.imageSize = new Size(barWidth, 5);
 

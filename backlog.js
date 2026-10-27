@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const DAILY_GOAL_MINUTES = 480; // 8 hours
+export const GOAL_HOURS_MIN = 8;
+export const GOAL_HOURS_MAX = 13;
 export const STREAK_MIN_MINUTES = 60;
 export const ROLLOVER_HOUR = 3; // the logical day starts at 3am
 
@@ -29,6 +31,36 @@ export const achievedKeyFor = (coupleId) => `haven-achieved-${coupleId}`;
 export const goldDaysKeyFor = (coupleId) => `haven-golddays-${coupleId}`;
 export const prefsKey = "haven-prefs-v1";
 
+// Goal changes are dated. Days before the first entry are measured against the
+// 8h default, so raising the goal today cannot invent backlog for last month.
+export function goalForDay(dayKey, history = [], fallback = DAILY_GOAL_MINUTES) {
+  const entries = (Array.isArray(history) ? history : [])
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry.from === "string" &&
+        Number.isFinite(Number(entry.minutes)) &&
+        Number(entry.minutes) > 0,
+    )
+    .sort((a, b) => a.from.localeCompare(b.from));
+  let minutes = fallback;
+  for (const entry of entries) {
+    if (entry.from > dayKey) break;
+    minutes = Math.round(Number(entry.minutes));
+  }
+  return minutes;
+}
+
+// Replaces today's entry instead of stacking one per tap.
+export function withGoalForDay(history, dayKey, minutes) {
+  const rest = (Array.isArray(history) ? history : []).filter(
+    (entry) => entry?.from !== dayKey,
+  );
+  return [...rest, { from: dayKey, minutes: Math.round(Number(minutes) || 0) }].sort(
+    (a, b) => a.from.localeCompare(b.from),
+  );
+}
+
 // True only on the render that crosses the goal, so a celebration cannot fire
 // twice for the same 8h mark (479 -> 480 yes, 480 -> 520 no).
 export function goalReached(prevMinutes, nextMinutes, goal = DAILY_GOAL_MINUTES) {
@@ -45,7 +77,13 @@ export function addGoldDay(days = [], key) {
 
 // Chronological running backlog across ALL logged days, floor at 0.
 // balance = max(0, balance + (GOAL - dayMinutes))
+// `goalMinutes` may be a number or a (dayKey) => minutes resolver, so a day is
+// always measured against the goal that was in force on that day.
 export function computeBacklog(studyLogs = [], goalMinutes = DAILY_GOAL_MINUTES, rolloverHour = ROLLOVER_HOUR, now = new Date()) {
+  const goalFor =
+    typeof goalMinutes === "function"
+      ? goalMinutes
+      : () => Math.max(0, Number(goalMinutes) || 0);
   const byDay = {};
   (Array.isArray(studyLogs) ? studyLogs : []).forEach((log) => {
     if (!log?.date) return;
@@ -55,7 +93,7 @@ export function computeBacklog(studyLogs = [], goalMinutes = DAILY_GOAL_MINUTES,
   let balance = 0;
   const perDay = days.map((date) => {
     const minutes = byDay[date];
-    balance = Math.max(0, balance + (goalMinutes - minutes));
+    balance = Math.max(0, balance + (goalFor(date) - minutes));
     return { date, minutes, balanceAfter: balance };
   });
   const todayKey = dayKeyFor(now, rolloverHour);
@@ -192,6 +230,8 @@ export const DEFAULT_PREFS = {
   weeklyWeekday: 1, // Sunday (0=Sun per JS? we store expo weekday 1=Sunday)
   weeklyHour: 20,
   weeklyMinute: 0,
+  goalHistory: [],
+  goalSettingUnlocked: false,
 };
 
 export async function loadPrefs() {

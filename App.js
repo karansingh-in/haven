@@ -71,13 +71,13 @@ import {
     X,
 } from "lucide-react-native";
 import Svg, { Circle } from "react-native-svg";
-import {
-    useFonts as useInter,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-} from "@expo-google-fonts/inter";
+import { useFonts as useInter } from "expo-font";
+// Four weights, imported one by one: the package index pulls every Inter
+// weight and italic into the bundle (~6 MB) even when they are never drawn.
+import { Inter_400Regular } from "@expo-google-fonts/inter/400Regular";
+import { Inter_500Medium } from "@expo-google-fonts/inter/500Medium";
+import { Inter_600SemiBold } from "@expo-google-fonts/inter/600SemiBold";
+import { Inter_700Bold } from "@expo-google-fonts/inter/700Bold";
 import { onAuthStateChanged } from "firebase/auth";
 import {
     auth,
@@ -91,6 +91,7 @@ import {
     publishWidgetSummary,
     subscribeToCoupleData,
     updateCouplePeriods,
+    updateCoupleSymptoms,
 } from "./firebase";
 import {
     achievedKeyFor,
@@ -106,7 +107,10 @@ import {
     formatHoursShort,
     formatSignedDelta,
     formatThousands,
+    goalForDay,
     goalReached,
+    GOAL_HOURS_MAX,
+    GOAL_HOURS_MIN,
     goldDaysKeyFor,
     gradeFor,
     loadPrefs,
@@ -114,6 +118,7 @@ import {
     remainingCapacity,
     savePrefs,
     weekOverWeek,
+    withGoalForDay,
 } from "./backlog";
 import {
     ensureNotificationSetup,
@@ -144,6 +149,15 @@ import {
 } from "./src/mistakes";
 import { ACCENTS, ACCENT_OPTIONS, applyAccent, DARK, LIGHT } from "./src/palette";
 import { buildWidgetPayload } from "./src/widget";
+import {
+  addDaysToKey,
+  formatDateKey,
+  getDaysBetween,
+  isValidDateKey,
+  pad,
+  parseDateKey,
+} from "./src/dates";
+import { cycleSummary, easedDayKeys, softenedGoalMinutes } from "./src/cycle";
 
 // ============================================================
 // TYPE — Inter (tabular nums for figures)
@@ -290,38 +304,6 @@ function useStyles() {
 // DATE + DURATION HELPERS
 // ============================================================
 
-const pad = (value) => String(value).padStart(2, "0");
-
-const formatDateKey = (date) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-
-const parseDateKey = (value) => {
-  if (!value) return null;
-  const parts = value.split("-").map(Number);
-  if (parts.length !== 3) return null;
-  const [year, month, day] = parts;
-  if (!year || !month || !day || month < 1 || month > 12 || day < 1 || day > 31) {
-    return null;
-  }
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-  return date;
-};
-
-const getDaysBetween = (start, end) => {
-  const a = new Date(start);
-  const b = new Date(end);
-  a.setHours(0, 0, 0, 0);
-  b.setHours(0, 0, 0, 0);
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-};
-
 const getTodayKey = () => dayKeyFor(new Date());
 
 const formatReadableDate = (dateKey) => {
@@ -352,8 +334,6 @@ const formatRelativeDate = (dateKey) => {
 
 const formatMonthYear = (date) =>
   `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
-
-const isValidDateKey = (value) => parseDateKey(value) !== null;
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -386,6 +366,28 @@ const formatClock = (ms) => {
   const s = total % 60;
   if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
   return `${pad(m)}:${pad(s)}`;
+};
+
+// Eight taps, not Flo's eighty.
+const SYMPTOMS = [
+  { id: "cramps", label: "Cramps" },
+  { id: "headache", label: "Headache" },
+  { id: "bloating", label: "Bloating" },
+  { id: "skin", label: "Skin" },
+  { id: "back", label: "Back" },
+  { id: "tired", label: "Tired" },
+  { id: "low", label: "Low" },
+  { id: "hungry", label: "Hungry" },
+];
+
+const PHASE_LABEL = {
+  menstrual: "Period",
+  follicular: "Follicular",
+  ovulation: "Ovulation",
+  luteal: "Luteal",
+  pms: "PMS",
+  late: "Late",
+  unknown: "",
 };
 
 // ============================================================
@@ -652,6 +654,7 @@ function AppShell() {
         studyLogs: Array.isArray(data.studyLogs) ? data.studyLogs : [],
         recentSubjects: Array.isArray(data.recentSubjects) ? data.recentSubjects : [],
         testScores: Array.isArray(data.testScores) ? data.testScores : [],
+        symptoms: data.symptoms && typeof data.symptoms === "object" ? data.symptoms : {},
       });
     });
     return unsubscribe;
@@ -946,10 +949,22 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
 
   const timer = useStudyTimer(coupleId);
   const tick = useMinuteTick();
+  const periods = useMemo(() => normalizePeriods(coupleData.periods), [coupleData.periods]);
+  const easedKeys = useMemo(() => easedDayKeys(periods), [periods]);
+  // One place decides what a day's goal means: the goal in force that day, cut
+  // to the softened value on the second and third day of a logged period.
+  const goalFor = useCallback(
+    (dayKey) => {
+      const base = goalForDay(dayKey, prefs.goalHistory);
+      return easedKeys.has(dayKey) ? softenedGoalMinutes(base) : base;
+    },
+    [prefs.goalHistory, easedKeys],
+  );
   // `tick` is not read inside the memos: it only schedules a recompute so the
   // 3am rollover lands without waiting for the next user interaction.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const backlog = useMemo(() => computeBacklog(coupleData.studyLogs), [coupleData.studyLogs, tick]);
+  const backlog = useMemo(() => computeBacklog(coupleData.studyLogs, goalFor), [coupleData.studyLogs, goalFor, tick]);
+  const goalMinutes = goalFor(backlog.todayKey);
   const daysLeft = Math.max(0, Math.floor((new Date(`${NEET_EXAM_DATE}T00:00:00`).getTime() - Date.now()) / 86400000));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const streak = useMemo(() => computeStreak(coupleData.studyLogs), [coupleData.studyLogs, tick]);
@@ -993,6 +1008,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         coupleId,
         buildWidgetPayload({
           todayMinutes: backlog.todayMinutes,
+          goalMinutes,
           streak,
           balanceMinutes: backlog.balanceMinutes,
           daysLeft,
@@ -1001,7 +1017,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
       ).catch(() => {});
     }, 2000);
     return () => clearTimeout(id);
-  }, [coupleId, backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft, goldDays]);
+  }, [coupleId, backlog.todayMinutes, backlog.balanceMinutes, streak, daysLeft, goldDays, goalMinutes]);
 
   const lastActive = useRef(Date.now());
   useEffect(() => {
@@ -1063,7 +1079,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         // Only consume the previous total once the read succeeded: a transient
         // AsyncStorage throw must not permanently skip that day's celebration.
         prevTodayRef.current = backlog.todayMinutes;
-        if (goalReached(prevToday, backlog.todayMinutes) && achievedDate !== backlog.todayKey) {
+        if (goalReached(prevToday, backlog.todayMinutes, goalMinutes) && achievedDate !== backlog.todayKey) {
           await AsyncStorage.setItem(achievedKeyFor(coupleId), backlog.todayKey);
           setCelebration({ kind: "goal", detail: `${formatDuration(backlog.todayMinutes)} logged today.` });
           // Gold-day bookkeeping never blocks the overlay above.
@@ -1091,7 +1107,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
     };
     const id = setTimeout(check, 800);
     return () => clearTimeout(id);
-  }, [backlog.todayMinutes, backlog.balanceMinutes, backlog.todayKey, coupleId]);
+  }, [backlog.todayMinutes, backlog.balanceMinutes, backlog.todayKey, coupleId, goalMinutes]);
 
   const go = (next) => {
     if (next !== tab) Haptics.selectionAsync().catch(() => {});
@@ -1106,7 +1122,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   );
 
   const screen = () => {
-    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} />;
+    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} goalMinutes={goalMinutes} />;
     if (tab === "study") {
       return (
         <StudyScreen
@@ -1115,6 +1131,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
           timer={timer}
           backlog={backlog}
           streak={streak}
+          goalMinutes={goalMinutes}
         />
       );
     }
@@ -1122,7 +1139,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
       return <InsightsScreen coupleData={coupleData} coupleId={coupleId} backlog={backlog} streak={streak} goldDays={goldDays} />;
     }
     if (tab === "neet") {
-      return <NeetScreen coupleId={coupleId} />;
+      return <NeetScreen coupleId={coupleId} goalMinutes={goalMinutes} />;
     }
     return (
       <HomeScreen
@@ -1130,6 +1147,8 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         timer={timer}
         backlog={backlog}
         streak={streak}
+        goalMinutes={goalMinutes}
+        softenedToday={easedKeys.has(backlog.todayKey)}
         onNavigate={go}
         onOpenSettings={() => setSettingsOpen(true)}
       />
@@ -1167,6 +1186,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
         kind={celebration?.kind}
         detail={celebration?.detail}
         goldDayCount={goldDays.length}
+        goalMinutes={goalMinutes}
         onDismiss={() => setCelebration(null)}
       />
       {isWeb ? null : <LockScreen visible={locked} timerRunning={timer.running} onUnlock={() => setLocked(false)} />}
@@ -1567,7 +1587,7 @@ function ConfettiField({ colors }) {
   );
 }
 
-function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0 }) {
+function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0, goalMinutes = DAILY_GOAL_MINUTES }) {
   const { c } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1624,10 +1644,10 @@ function CelebrationOverlay({ visible, kind, detail, onDismiss, goldDayCount = 0
                 trackColor="rgba(255,255,255,0.10)"
                 fillColor={c.tint}
               >
-                <Text style={styles.goalRingFigure}>8h</Text>
-                <Text style={styles.goalRingLabel}>of 8h</Text>
+                <Text style={styles.goalRingFigure}>{formatHoursShort(goalMinutes)}h</Text>
+                <Text style={styles.goalRingLabel}>of {formatHoursShort(goalMinutes)}h</Text>
               </Ring>
-              <Text style={styles.goalTitle}>Eight hours.</Text>
+              <Text style={styles.goalTitle}>{formatHoursShort(goalMinutes)} hours.</Text>
               <Text style={styles.goalSub}>{detail || "The whole day, kept."}</Text>
               {goldDayCount > 0 ? (
                 <View style={styles.goalGoldPill}>
@@ -1832,7 +1852,7 @@ function TestSheet({ visible, onClose, onSave }) {
 // TODAY
 // ============================================================
 
-function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSettings }) {
+function HomeScreen({ coupleData, timer, backlog, streak, goalMinutes = DAILY_GOAL_MINUTES, softenedToday = false, onNavigate, onOpenSettings }) {
   const { c } = useTheme();
   const { prefs } = usePrefs();
   const styles = useStyles();
@@ -1851,13 +1871,13 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
   const todayLogs = coupleData.studyLogs?.filter((log) => log?.date === today) || [];
   const todayMinutes = todayLogs.reduce((sum, log) => sum + (Number(log.duration) || 0), 0);
   const backlogMinutes = backlog?.balanceMinutes ?? 0;
-  const pct = Math.round((todayMinutes / DAILY_GOAL_MINUTES) * 100);
-  const goalDone = todayMinutes >= DAILY_GOAL_MINUTES;
+  const pct = Math.round((todayMinutes / goalMinutes) * 100);
+  const goalDone = todayMinutes >= goalMinutes;
 
   // Pace is judged against the 03:00-anchored day, so it is only meaningful once
   // something is logged or the morning has started. At 04:00 with nothing done
   // there is no story to tell.
-  const pace = paceStatus(todayMinutes);
+  const pace = paceStatus(todayMinutes, new Date(), goalMinutes);
   const showPace = todayMinutes > 0 || new Date().getHours() >= 6;
 
   return (
@@ -1901,10 +1921,10 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
                   <View style={styles.heroGlow} />
                   <View style={styles.heroRow}>
                     <View style={{ alignItems: "center", gap: 8 }}>
-                      <Ring size={128} stroke={13} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
+                      <Ring size={128} stroke={13} progress={todayMinutes / goalMinutes} trackColor="rgba(255,255,255,0.35)" fillColor="#FFFFFF">
                         <View style={{ alignItems: "center" }}>
                           <Text style={styles.heroRingValue}>{formatHoursShort(todayMinutes)}h</Text>
-                          <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of 8h`}</Text>
+                          <Text style={styles.heroRingCaption}>{goalDone ? "complete" : `${pct}% of ${formatHoursShort(goalMinutes)}h`}</Text>
                         </View>
                       </Ring>
                       {showPace ? (
@@ -1917,8 +1937,11 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
                     <View style={{ flex: 1 }}>
                       <Text style={styles.heroKicker}>{goalDone ? "GOLD DAY" : "TODAY'S FOCUS"}</Text>
                       <Text style={styles.heroLine}>
-                        {goalDone ? "Eight hours, protected." : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to 8 hours.`}
+                        {goalDone ? `${formatHoursShort(goalMinutes)} hours, protected.` : `${formatDuration(Math.max(0, goalMinutes - todayMinutes))} to ${formatHoursShort(goalMinutes)} hours.`}
                       </Text>
+                      {softenedToday ? (
+                        <Text style={styles.heroSoften}>Period day - a lighter goal today.</Text>
+                      ) : null}
                       <View style={styles.heroMetaRow}>
                         <View style={styles.heroPill}>
                           <Flame size={12} color="#FFFFFF" />
@@ -2005,7 +2028,7 @@ function HomeScreen({ coupleData, timer, backlog, streak, onNavigate, onOpenSett
 // CALENDAR
 // ============================================================
 
-function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
+function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAILY_GOAL_MINUTES }) {
   const { c } = useTheme();
   const styles = useStyles();
   const { isWide } = useLayout();
@@ -2015,12 +2038,49 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
   const daySize = isWide ? { height: 56 } : null;
   const dayInnerSize = isWide ? { width: 42, height: 42, borderRadius: 21 } : null;
   const periods = normalizePeriods(coupleData.periods);
+  const todayKey = getTodayKey();
+  const cycle = useMemo(() => cycleSummary(periods, todayKey), [periods, todayKey]);
+  const softenedToday = useMemo(() => easedDayKeys(periods).has(todayKey), [periods, todayKey]);
+  const symptomsByDay = coupleData.symptoms && typeof coupleData.symptoms === "object" ? coupleData.symptoms : {};
   const [displayDate, setDisplayDate] = useState(() => parseDateKey(dayKeyFor()));
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
 
   const goldSet = useMemo(() => new Set(goldDays.filter(Boolean)), [goldDays]);
+
+  // One dashed day for an irregular cycle, the full expected bleed for a steady
+  // one. A range is only honest when the history actually varies.
+  const predictedDays = useMemo(() => {
+    const set = new Set();
+    if (!cycle.predictedStart) return set;
+    const span = cycle.confidence === "high" ? Math.max(1, cycle.periodDays || 5) : 1;
+    let key = cycle.predictedStart;
+    for (let i = 0; i < span; i += 1) {
+      set.add(key);
+      key = addDaysToKey(key, 1);
+    }
+    return set;
+  }, [cycle.predictedStart, cycle.periodDays, cycle.confidence]);
+
+  const dayMinutes = useMemo(() => {
+    const logs = Array.isArray(coupleData.studyLogs) ? coupleData.studyLogs : [];
+    return logs
+      .filter((log) => log?.date === selectedDate)
+      .reduce((sum, log) => sum + (Number(log.duration) || 0), 0);
+  }, [coupleData.studyLogs, selectedDate]);
+
+  const selectedSymptoms = Array.isArray(symptomsByDay[selectedDate]) ? symptomsByDay[selectedDate] : [];
+
+  const toggleSymptom = (id) => {
+    const next = selectedSymptoms.includes(id)
+      ? selectedSymptoms.filter((entry) => entry !== id)
+      : [...selectedSymptoms, id];
+    Haptics.selectionAsync().catch(() => {});
+    updateCoupleSymptoms(coupleId, selectedDate, next).catch(() => {
+      Alert.alert("Not saved", "Check your connection and try again.");
+    });
+  };
 
   const calendarDays = useMemo(() => {
     const year = displayDate.getFullYear();
@@ -2078,9 +2138,31 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
     });
   };
 
+  const cycleTitle =
+    cycle.status === "none"
+      ? "Your cycle"
+      : cycle.lateDays > 0
+        ? `Period is ${cycle.lateDays} ${cycle.lateDays === 1 ? "day" : "days"} late`
+        : cycle.status === "learning"
+          ? `Day ${cycle.cycleDay} of your cycle`
+          : cycle.daysUntil === 0
+            ? "Period expected today"
+            : `Period in ${cycle.daysUntil} ${cycle.daysUntil === 1 ? "day" : "days"}`;
+
+  const cycleBody =
+    cycle.status === "none"
+      ? "Log a period and Haven starts predicting the next one."
+      : cycle.status === "learning"
+        ? "One more period logged and predictions begin."
+        : cycle.lateDays > 0
+          ? `Expected ${formatShortDate(cycle.nextStart)}. Bodies are not clocks - log it when it starts.`
+          : cycle.confidence === "low"
+            ? `Recent cycles ran ${cycle.shortest}-${cycle.longest} days, so expect it between ${formatShortDate(cycle.predictedStart)} and ${formatShortDate(cycle.predictedEnd)}.`
+            : `${PHASE_LABEL[cycle.phase] || "Day " + cycle.cycleDay} · around ${formatShortDate(cycle.nextStart)}${cycle.phase === "pms" ? ` · PMS ${formatShortDate(cycle.pmsStart)}-${formatShortDate(cycle.pmsEnd)}` : ""}`;
+
   return (
     <>
-      <ScreenScroll extraBottom={56}>
+      <ScreenScroll extraBottom={96}>
         <Rise>
           <View style={styles.pageHeader}>
             <View style={{ flex: 1 }}>
@@ -2088,6 +2170,31 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
               <Text style={styles.pageTitle}>Calendar</Text>
             </View>
           </View>
+        </Rise>
+
+        <Rise delay={40}>
+          <Card style={styles.cycleCard}>
+            <View style={styles.cycleMain}>
+              <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
+                <Heart size={22} color={c.rose} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cycleLabel}>{cycleTitle}</Text>
+                <Text style={styles.cycleSubtext}>{cycleBody}</Text>
+              </View>
+              {cycle.average ? (
+                <View style={styles.cycleAvg}>
+                  <Text style={styles.cycleAvgValue}>{cycle.average}d</Text>
+                  <Text style={styles.cycleAvgLabel}>AVG</Text>
+                </View>
+              ) : null}
+            </View>
+            {softenedToday ? (
+              <Text style={styles.cycleSoften}>
+                Period day - the goal is {formatHoursShort(goalMinutes)}h today.
+              </Text>
+            ) : null}
+          </Card>
         </Rise>
 
         <Rise delay={70}>
@@ -2125,6 +2232,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                 const isSelected = dateKey === selectedDate;
                 const isToday = dateKey === getTodayKey();
                 const isPeriod = periodDays.has(dateKey);
+                const isPredicted = predictedDays.has(dateKey) && !isPeriod;
                 return (
                   <Pressable
                     key={dateKey}
@@ -2135,6 +2243,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                       isSelected ? "selected" : null,
                       isToday ? "today" : null,
                       isPeriod ? "period" : null,
+                      isPredicted ? "predicted period" : null,
                       goldSet.has(dateKey) ? "gold day" : null,
                     ]
                       .filter(Boolean)
@@ -2144,7 +2253,15 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                       setSelectedDate(dateKey);
                     }}
                   >
-                    <View style={[styles.dayInner, dayInnerSize, isPeriod && { backgroundColor: c.roseSoft }, isSelected && { backgroundColor: c.tint }]}>
+                    <View
+                      style={[
+                        styles.dayInner,
+                        dayInnerSize,
+                        isPeriod && { backgroundColor: c.roseSoft },
+                        isPredicted && { borderWidth: 1, borderColor: c.rose, borderStyle: "dashed" },
+                        isSelected && { backgroundColor: c.tint, borderWidth: 0 },
+                      ]}
+                    >
                       <Text
                         style={[
                           styles.dayText,
@@ -2155,7 +2272,14 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                       >
                         {date.getDate()}
                       </Text>
-                      {goldSet.has(dateKey) ? <View style={[styles.goldDot, { backgroundColor: c.gold }]} /> : null}
+                      {goldSet.has(dateKey) ? (
+                        <View
+                          style={[
+                            styles.goldDot,
+                            { backgroundColor: c.gold, borderColor: isSelected ? c.tint : c.surface },
+                          ]}
+                        />
+                      ) : null}
                     </View>
                   </Pressable>
                 );
@@ -2167,6 +2291,14 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
                 <Text style={styles.legendText}>Period</Text>
               </View>
               <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { borderWidth: 1, borderColor: c.rose, borderStyle: "dashed" }]} />
+                <Text style={styles.legendText}>Predicted</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: c.gold }]} />
+                <Text style={styles.legendText}>Gold day</Text>
+              </View>
+              <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: c.tint }]} />
                 <Text style={styles.legendText}>Selected</Text>
               </View>
@@ -2175,15 +2307,52 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
         </Rise>
 
         <SectionHeader title={formatReadableDate(selectedDate)} />
-        {selectedPeriods.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <View style={[styles.glyphLarge, { backgroundColor: c.roseSoft }]}>
-              <Heart size={22} color={c.rose} />
+
+        <Card>
+          <View style={styles.row}>
+            <View style={[styles.glyph, { backgroundColor: goldSet.has(selectedDate) ? c.goldSoft : c.tintSoft }]}>
+              {goldSet.has(selectedDate) ? <Sparkles size={17} color={c.gold} /> : <Timer size={17} color={c.tint} />}
             </View>
-            <Text style={styles.emptyCardTitle}>Nothing logged</Text>
-            <Text style={styles.emptyCardBody}>This day is still waiting for its first little entry.</Text>
-          </Card>
-        ) : (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>
+                {dayMinutes > 0 ? `${formatDuration(dayMinutes)} studied` : "No study logged"}
+              </Text>
+              <Text style={styles.rowMeta}>
+                {goldSet.has(selectedDate)
+                  ? "Gold day - goal met"
+                  : selectedPeriods.length
+                    ? "Period day"
+                    : dayMinutes > 0
+                      ? "Not a gold day"
+                      : "Nothing on this day yet"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.separatorInset} />
+          <View style={{ padding: 15 }}>
+            <Text style={styles.rowTitle}>How you felt</Text>
+            <View style={[styles.chipWrap, { marginTop: 10, marginBottom: 0 }]}>
+              {SYMPTOMS.map((symptom) => {
+                const active = selectedSymptoms.includes(symptom.id);
+                return (
+                  <Pressable
+                    key={symptom.id}
+                    onPress={() => toggleSymptom(symptom.id)}
+                    style={[styles.chip, active && { backgroundColor: c.roseSoft, borderColor: c.rose }]}
+                    accessibilityRole="checkbox"
+                    aria-checked={active}
+                  >
+                    <Text style={[styles.chipText, active && { color: c.rose, fontFamily: BODY_SEMI }]}>
+                      {symptom.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </Card>
+
+        {selectedPeriods.length ? (
           <Card>
             {selectedPeriods.map((period, index) => (
               <View key={period.id}>
@@ -2215,7 +2384,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
               </View>
             ))}
           </Card>
-        )}
+        ) : null}
       </ScreenScroll>
 
       <Fab label="Log period" onPress={() => openSheet()} />
@@ -2236,7 +2405,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
 // STUDY
 // ============================================================
 
-function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
+function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes = DAILY_GOAL_MINUTES }) {
   const { c } = useTheme();
   const styles = useStyles();
   const { isWide } = useLayout();
@@ -2251,9 +2420,9 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
     .filter((log) => log?.date === today)
     .reduce((sum, log) => sum + (Number(log.duration) || 0), 0);
   const backlogMinutes = backlog?.balanceMinutes ?? 0;
-  const pct = Math.round((todayMinutes / DAILY_GOAL_MINUTES) * 100);
-  const status = todayMinutes >= DAILY_GOAL_MINUTES ? "Ahead — burning backlog" : pct >= 50 ? "On track" : "Behind — every hour counts";
-  const statusColor = todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : pct >= 50 ? c.gold : c.rose;
+  const pct = Math.round((todayMinutes / goalMinutes) * 100);
+  const status = todayMinutes >= goalMinutes ? "Ahead — burning backlog" : pct >= 50 ? "On track" : "Behind — every hour counts";
+  const statusColor = todayMinutes >= goalMinutes ? c.mint : pct >= 50 ? c.gold : c.rose;
   const recentSubjects = Array.isArray(coupleData.recentSubjects) ? coupleData.recentSubjects : [];
 
   const openBlank = () => {
@@ -2331,7 +2500,7 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
               </Rise>
 
               <Rise delay={70}>
-                <TimerCard timer={timer} todayMinutes={todayMinutes} onFinish={finishTimer} onDiscard={discardTimer} />
+                <TimerCard timer={timer} todayMinutes={todayMinutes} goalMinutes={goalMinutes} onFinish={finishTimer} onDiscard={discardTimer} />
               </Rise>
 
               <Rise delay={120}>
@@ -2349,10 +2518,10 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
           right={
             <>
               <Rise delay={160}>
-                <SectionHeader flush={isWide} title="Today" trailing={<Text style={styles.sectionDate}>Goal {formatHoursShort(DAILY_GOAL_MINUTES)} h</Text>} />
+                <SectionHeader flush={isWide} title="Today" trailing={<Text style={styles.sectionDate}>Goal {formatDuration(goalMinutes)}</Text>} />
                 <Card style={styles.todayCard}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                    <Ring size={104} stroke={11} progress={todayMinutes / DAILY_GOAL_MINUTES} trackColor={c.fill} fillColor={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : c.tint}>
+                    <Ring size={104} stroke={11} progress={todayMinutes / goalMinutes} trackColor={c.fill} fillColor={todayMinutes >= goalMinutes ? c.mint : c.tint}>
                       <View style={{ alignItems: "center" }}>
                         <Text style={styles.ringValue}>{formatHoursShort(todayMinutes)}h</Text>
                         <Text style={styles.ringCaption}>{pct}%</Text>
@@ -2362,12 +2531,12 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
                       <Text style={styles.todayValue}>{formatDuration(todayMinutes)}</Text>
                       <Text style={styles.todayGoal}>{pct}% of today's goal</Text>
                       <Text style={[styles.todayGoal, { marginTop: 4, color: statusColor, fontFamily: BODY_SEMI }]}>
-                        {todayMinutes >= DAILY_GOAL_MINUTES ? "Surplus burns backlog" : `${formatDuration(Math.max(0, DAILY_GOAL_MINUTES - todayMinutes))} to reach 8h`}
+                        {todayMinutes >= goalMinutes ? "Surplus burns backlog" : `${formatDuration(Math.max(0, goalMinutes - todayMinutes))} to reach ${formatHoursShort(goalMinutes)}h`}
                       </Text>
                     </View>
                   </View>
                   <View style={{ marginTop: 14 }}>
-                    <Progress value={todayMinutes / DAILY_GOAL_MINUTES} color={todayMinutes >= DAILY_GOAL_MINUTES ? c.mint : undefined} />
+                    <Progress value={todayMinutes / goalMinutes} color={todayMinutes >= goalMinutes ? c.mint : undefined} />
                   </View>
                 </Card>
               </Rise>
@@ -2434,7 +2603,7 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak }) {
   );
 }
 
-function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
+function TimerCard({ timer, todayMinutes, goalMinutes = DAILY_GOAL_MINUTES, onFinish, onDiscard }) {
   const { c } = useTheme();
   const styles = useStyles();
   const breathe = useRef(new Animated.Value(0)).current;
@@ -2457,7 +2626,7 @@ function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
   const haloScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
   const haloOpacity = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.08] });
   const combined = todayMinutes + timer.elapsedMinutes;
-  const combinedProgress = combined / DAILY_GOAL_MINUTES;
+  const combinedProgress = combined / goalMinutes;
 
   return (
     <Card style={styles.timerCard}>
@@ -2482,9 +2651,9 @@ function TimerCard({ timer, todayMinutes, onFinish, onDiscard }) {
       </View>
 
       <View style={styles.timerProgress}>
-        <Progress value={combinedProgress} color={combined >= DAILY_GOAL_MINUTES ? c.mint : undefined} />
+        <Progress value={combinedProgress} color={combined >= goalMinutes ? c.mint : undefined} />
         <Text style={styles.timerProgressText}>
-          {formatDuration(combined)} of {formatHoursShort(DAILY_GOAL_MINUTES)} h today
+          {formatDuration(combined)} of {formatDuration(goalMinutes)} today
         </Text>
       </View>
 
@@ -2816,7 +2985,7 @@ function reviewLabel(reviewAt, now) {
   return `in ${days}d`;
 }
 
-function NeetScreen({ coupleId }) {
+function NeetScreen({ coupleId, goalMinutes = DAILY_GOAL_MINUTES }) {
   const { c } = useTheme();
   const styles = useStyles();
   const { isWide } = useLayout();
@@ -3021,7 +3190,7 @@ function NeetScreen({ coupleId }) {
                   {pad(hoursLeft)}:{pad(minutesLeft)}:{pad(secondsLeft)} until NEET opens
                 </Text>
                 <Text style={styles.neetCapacity}>
-                  {daysLeft} days × 8h = {formatThousands(remainingCapacity(daysLeft) / 60)}h left
+                  {daysLeft} days × {formatHoursShort(goalMinutes)}h = {formatThousands(remainingCapacity(daysLeft, goalMinutes) / 60)}h left
                 </Text>
                 <View style={styles.separatorInset} />
                 <View style={styles.neetStatRow}>
@@ -3756,6 +3925,31 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
   const isWeb = Platform.OS === "web";
   const [nameDraft, setNameDraft] = useState(prefs.displayName);
   const [affirmDraft, setAffirmDraft] = useState(prefs.affirmation);
+  const [goalTaps, setGoalTaps] = useState(0);
+  const currentGoal = goalForDay(getTodayKey(), prefs.goalHistory);
+
+  // Hidden on purpose: five taps on the footer, then the Daily goal row appears
+  // for good. Nothing else in the app needs a goal that moves.
+  const revealGoalSetting = () => {
+    if (prefs.goalSettingUnlocked) return;
+    if (goalTaps + 1 >= 5) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setGoalTaps(0);
+      updatePrefs({ goalSettingUnlocked: true });
+      return;
+    }
+    setGoalTaps(goalTaps + 1);
+  };
+
+  const stepGoal = (deltaMinutes) => {
+    const next = Math.min(
+      GOAL_HOURS_MAX * 60,
+      Math.max(GOAL_HOURS_MIN * 60, currentGoal + deltaMinutes),
+    );
+    if (next === currentGoal) return;
+    Haptics.selectionAsync().catch(() => {});
+    updatePrefs({ goalHistory: withGoalForDay(prefs.goalHistory, getTodayKey(), next) });
+  };
 
   useEffect(() => {
     if (visible) {
@@ -3918,6 +4112,56 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
         </>
       )}
 
+      {prefs.goalSettingUnlocked ? (
+        <>
+          <SectionHeader title="Daily goal" />
+          <Card>
+            <View style={styles.row}>
+              <View style={[styles.glyph, { backgroundColor: c.fill }]}>
+                <Target size={17} color={c.label2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{formatHoursShort(currentGoal)} hours a day</Text>
+                <Text style={styles.rowMeta}>Changes start today, never in the past.</Text>
+              </View>
+              <View style={styles.goalStepper}>
+                <Pressable
+                  onPress={() => stepGoal(-60)}
+                  disabled={currentGoal <= GOAL_HOURS_MIN * 60}
+                  hitSlop={6}
+                  style={({ pressed }) => [
+                    styles.goalStep,
+                    currentGoal <= GOAL_HOURS_MIN * 60 && { opacity: 0.35 },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Lower the daily goal by an hour"
+                >
+                  <Text style={styles.goalStepText}>-</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => stepGoal(60)}
+                  disabled={currentGoal >= GOAL_HOURS_MAX * 60}
+                  hitSlop={6}
+                  style={({ pressed }) => [
+                    styles.goalStep,
+                    currentGoal >= GOAL_HOURS_MAX * 60 && { opacity: 0.35 },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Raise the daily goal by an hour"
+                >
+                  <Text style={styles.goalStepText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Card>
+          <Text style={styles.sheetHint}>
+            Days 2 and 3 of a logged period use a softer goal automatically - 8h drops to 6h30, 13h to 9h.
+          </Text>
+        </>
+      ) : null}
+
       <SectionHeader title="Account" />
       <Card>
         <Pressable onPress={signOut} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} accessibilityRole="button">
@@ -3927,7 +4171,14 @@ function SettingsSheet({ visible, profile, onClose, onLockNow }) {
           <Text style={[styles.rowTitle, { flex: 1, color: c.red }]}>Sign out</Text>
         </Pressable>
       </Card>
-      <Text style={styles.sheetHint}>Haven · made with care</Text>
+      <Pressable
+        onPress={revealGoalSetting}
+        style={({ pressed }) => [styles.footerTap, pressed && { opacity: 0.6 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Haven, made with care"
+      >
+        <Text style={styles.sheetHint}>Haven · made with care</Text>
+      </Pressable>
     </Sheet>
   );
 }
@@ -4229,6 +4480,14 @@ const makeStyles = (c) =>
       color: "#FFFFFF",
       ...TEXT_FIX,
     },
+    heroSoften: {
+      marginTop: 5,
+      fontSize: 12.5,
+      lineHeight: 18,
+      fontFamily: BODY_MED,
+      color: "rgba(255,255,255,0.88)",
+      ...TEXT_FIX,
+    },
     heroMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
     heroPill: {
       flexDirection: "row",
@@ -4308,6 +4567,7 @@ const makeStyles = (c) =>
     cycleAvg: { alignItems: "center", backgroundColor: c.fill, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
     cycleAvgValue: { fontSize: 16, lineHeight: 21, fontFamily: BODY_BOLD, color: c.tint, ...TEXT_FIX },
     cycleAvgLabel: { fontSize: 9, lineHeight: 12, fontFamily: BODY_BOLD, letterSpacing: 1.2, color: c.label3, ...TEXT_FIX },
+    cycleSoften: { marginTop: 12, paddingTop: 12, borderTopWidth: HAIRLINE, borderTopColor: c.separator, fontSize: 12.5, lineHeight: 18, color: c.rose, fontFamily: BODY_MED, ...TEXT_FIX },
 
     // CARDS / ROWS
     card: {
@@ -4448,8 +4708,8 @@ const makeStyles = (c) =>
     day: { width: `${100 / 7}%`, height: 46, alignItems: "center", justifyContent: "center" },
     dayInner: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
     dayText: { fontSize: 14, lineHeight: 20, color: c.label, fontFamily: BODY_MED, fontVariant: ["tabular-nums"], ...TEXT_FIX },
-    goldDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: 2 },
-    legend: { flexDirection: "row", gap: 20, marginTop: 14, paddingTop: 14, borderTopWidth: HAIRLINE, borderTopColor: c.separator },
+    goldDot: { position: "absolute", left: "50%", marginLeft: -3.5, bottom: 3, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: c.surface },
+    legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 18, rowGap: 8, marginTop: 14, paddingTop: 14, borderTopWidth: HAIRLINE, borderTopColor: c.separator },
     legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
     legendDot: { width: 7, height: 7, borderRadius: 4 },
     legendText: { fontSize: 11, lineHeight: 16, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
@@ -4564,6 +4824,10 @@ const makeStyles = (c) =>
     sheetSubtitle: { marginTop: 4, fontSize: 13, lineHeight: 19, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
     sheetClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" },
     sheetHint: { marginTop: 12, paddingHorizontal: 4, fontSize: 12, lineHeight: 18, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
+    footerTap: { alignSelf: "center", paddingHorizontal: 12, paddingVertical: 4 },
+    goalStepper: { flexDirection: "row", gap: 8 },
+    goalStep: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: c.fill },
+    goalStepText: { fontSize: 19, lineHeight: 23, color: c.label, fontFamily: BODY_SEMI, ...TEXT_FIX },
     presetRow: { flexDirection: "row", gap: 8 },
     preset: { flex: 1, height: 46, borderRadius: 15, backgroundColor: c.surface, borderWidth: HAIRLINE, borderColor: c.separator, alignItems: "center", justifyContent: "center" },
     presetText: { fontSize: 15, lineHeight: 21, fontFamily: BODY_BOLD, color: c.label, ...TEXT_FIX },
