@@ -9,7 +9,9 @@ import sharp from 'sharp';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const NAVY = '#0B1220';
+// The icon's own field, so flattened corners and the adaptive background match
+// the artwork instead of showing a seam.
+const PLUM = '#17101C';
 
 const ICON = path.join(root, 'assets/icons/haven-icon.svg');
 const GLYPH = path.join(root, 'assets/icons/haven-glyph.svg');
@@ -28,7 +30,7 @@ const MONO = path.join(root, 'assets/icons/haven-monochrome.svg');
 const outputs = [
   { file: 'assets/images/icon.png', size: 1024, source: ICON, flatten: true, alpha: false },
   { file: 'assets/images/android-icon-foreground.png', size: 1024, source: GLYPH, alpha: true },
-  { file: 'assets/images/android-icon-background.png', size: 1024, fill: NAVY, alpha: false },
+  { file: 'assets/images/android-icon-background.png', size: 1024, fill: PLUM, alpha: false },
   { file: 'assets/images/android-icon-monochrome.png', size: 1024, source: MONO, alpha: true },
   { file: 'assets/images/splash-icon.png', size: 512, source: GLYPH, alpha: true },
   { file: 'assets/images/favicon.png', size: 48, source: ICON, flatten: true, alpha: false },
@@ -49,7 +51,7 @@ async function build({ file, size, source, fill, flatten, alpha }) {
   } else {
     pipeline = sharp(source).resize(size, size, { fit: 'contain' });
     if (flatten) {
-      pipeline = pipeline.flatten({ background: NAVY }).removeAlpha();
+      pipeline = pipeline.flatten({ background: PLUM }).removeAlpha();
     }
   }
 

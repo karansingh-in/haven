@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0" stop-color="#0A84FF"/>
-      <stop offset="1" stop-color="#5AC8A8"/>
+    <linearGradient id="heart" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFA8C6"/>
+      <stop offset="1" stop-color="#FF6E9C"/>
     </linearGradient>
   </defs>
-  <circle cx="512" cy="512" r="240" fill="none" stroke="url(#g)" stroke-width="78"
-          stroke-linecap="round" stroke-dasharray="1085.73 422.23" transform="rotate(-90 512 512)"/>
-  <circle cx="512" cy="512" r="24" fill="#F2F6FC"/>
+  <!-- Scaled to 0.78 so the heart and its sparkle stay inside Android's
+       adaptive-icon safe circle, which only guarantees the middle 66%. -->
+  <g transform="translate(512 512) scale(0.78) translate(-512 -512)">
+    <path d="M512 772 C 512 772, 262 606, 262 424 C 262 330, 336 264, 422 264 C 474 264, 502 292, 512 312 C 522 292, 550 264, 602 264 C 688 264, 762 330, 762 424 C 762 606, 512 772, 512 772 Z" fill="url(#heart)"/>
+    <path d="M742 226 L 748 252 L 774 258 L 748 264 L 742 290 L 736 264 L 710 258 L 736 252 Z" fill="#FFD9E6"/>
+  </g>
 </svg>
