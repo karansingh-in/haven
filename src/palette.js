@@ -34,6 +34,15 @@ export const ACCENTS = {
       dark: ["#D07800", "#D07800"],
     },
   },
+  pink: {
+    // Deep enough that white labels on the filled buttons stay readable.
+    tint: { light: "#C2185B", dark: "#FF375F" },
+    tintSoft: { light: "rgba(194,24,91,0.12)", dark: "rgba(255,55,95,0.16)" },
+    tintGradient: {
+      light: ["#C2185B", "#C2185B"],
+      dark: ["#FF375F", "#FF375F"],
+    },
+  },
 };
 
 export const ACCENT_OPTIONS = [
@@ -41,6 +50,7 @@ export const ACCENT_OPTIONS = [
   { value: "green", label: "Green" },
   { value: "indigo", label: "Indigo" },
   { value: "orange", label: "Orange" },
+  { value: "pink", label: "Pink" },
 ];
 
 export function applyAccent(base, accentKey) {

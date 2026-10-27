@@ -1150,7 +1150,7 @@ function MainAppLayout({ profile, coupleData, coupleId }) {
   );
 
   const screen = () => {
-    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} goalMinutes={goalMinutes} />;
+    if (tab === "calendar") return <CalendarScreen coupleData={coupleData} coupleId={coupleId} goldDays={goldDays} />;
     if (tab === "study") {
       return (
         <StudyScreen
@@ -2051,7 +2051,7 @@ function HomeScreen({ coupleData, timer, backlog, streak, goalMinutes = DAILY_GO
 // CALENDAR
 // ============================================================
 
-function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAILY_GOAL_MINUTES }) {
+function CalendarScreen({ coupleData, coupleId, goldDays = [] }) {
   const { c } = useTheme();
   const styles = useStyles();
   const { isWide } = useLayout();
@@ -2063,7 +2063,6 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAI
   const periods = normalizePeriods(coupleData.periods);
   const todayKey = getTodayKey();
   const cycle = useMemo(() => cycleSummary(periods, todayKey), [periods, todayKey]);
-  const softenedToday = useMemo(() => easedDayKeys(periods).has(todayKey), [periods, todayKey]);
   const symptomsByDay = coupleData.symptoms && typeof coupleData.symptoms === "object" ? coupleData.symptoms : {};
   const [displayDate, setDisplayDate] = useState(() => parseDateKey(dayKeyFor()));
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
@@ -2161,8 +2160,6 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAI
     });
   };
 
-  const { title: cycleTitle, body: cycleBody } = cycleCopy(cycle);
-
   return (
     <>
       <ScreenScroll extraBottom={96}>
@@ -2175,32 +2172,7 @@ function CalendarScreen({ coupleData, coupleId, goldDays = [], goalMinutes = DAI
           </View>
         </Rise>
 
-        <Rise delay={40} style={{ marginBottom: 14 }}>
-          <Card style={styles.cycleCard}>
-            <View style={styles.cycleMain}>
-              <View style={[styles.cycleCircle, { backgroundColor: c.roseSoft }]}>
-                <Heart size={22} color={c.rose} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cycleLabel}>{cycleTitle}</Text>
-                <Text style={styles.cycleSubtext}>{cycleBody}</Text>
-              </View>
-              {cycle.average ? (
-                <View style={styles.cycleAvg}>
-                  <Text style={styles.cycleAvgValue}>{cycle.average}d</Text>
-                  <Text style={styles.cycleAvgLabel}>AVG</Text>
-                </View>
-              ) : null}
-            </View>
-            {softenedToday ? (
-              <Text style={styles.cycleSoften}>
-                Period day - the goal is {formatHoursShort(goalMinutes)}h today.
-              </Text>
-            ) : null}
-          </Card>
-        </Rise>
-
-        <Rise delay={70}>
+        <Rise delay={40}>
           <Card style={styles.calendarCard}>
             <View style={[styles.calendarHead, gridWidth]}>
               <Pressable
@@ -4570,7 +4542,6 @@ const makeStyles = (c) =>
     cycleAvg: { alignItems: "center", backgroundColor: c.fill, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
     cycleAvgValue: { fontSize: 16, lineHeight: 21, fontFamily: BODY_BOLD, color: c.tint, ...TEXT_FIX },
     cycleAvgLabel: { fontSize: 9, lineHeight: 12, fontFamily: BODY_BOLD, letterSpacing: 1.2, color: c.label3, ...TEXT_FIX },
-    cycleSoften: { marginTop: 12, paddingTop: 12, borderTopWidth: HAIRLINE, borderTopColor: c.separator, fontSize: 12.5, lineHeight: 18, color: c.rose, fontFamily: BODY_MED, ...TEXT_FIX },
 
     // CARDS / ROWS
     card: {
