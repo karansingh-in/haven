@@ -1447,7 +1447,9 @@ function Progress({ value, color }) {
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-function Ring({ size = 120, stroke = 12, progress = 0, trackColor, fillColor, children }) {
+// `bezel` swaps the flat track for a ring of dots, so a ring at 0% still
+// reads as a dial instead of an empty circle.
+function Ring({ size = 120, stroke = 12, progress = 0, trackColor, fillColor, bezel = false, children }) {
   const v = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
   const target = Math.max(0, Math.min(1, progress || 0));
@@ -1472,7 +1474,23 @@ function Ring({ size = 120, stroke = 12, progress = 0, trackColor, fillColor, ch
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
       <Svg width={size} height={size} style={{ position: "absolute" }} accessible={false}>
-        <Circle cx={cx} cy={cx} r={r} stroke={trackColor} strokeWidth={stroke} fill="none" opacity={0.3} />
+        {bezel ? (
+          <Circle
+            cx={cx}
+            cy={cx}
+            r={r}
+            stroke={fillColor}
+            strokeWidth={2}
+            strokeDasharray="2 9"
+            strokeLinecap="round"
+            fill="none"
+            opacity={0.45}
+            rotation="-90"
+            origin={`${cx}, ${cx}`}
+          />
+        ) : (
+          <Circle cx={cx} cy={cx} r={r} stroke={trackColor} strokeWidth={stroke} fill="none" opacity={0.3} />
+        )}
         <AnimatedCircle
           cx={cx}
           cy={cx}
@@ -2581,48 +2599,29 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
 function TimerCard({ timer, todayMinutes, goalMinutes = DAILY_GOAL_MINUTES, onFinish, onDiscard }) {
   const { c } = useTheme();
   const styles = useStyles();
-  const breathe = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!timer.running) {
-      breathe.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathe, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(breathe, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [timer.running, breathe]);
-
-  const haloScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
-  const haloOpacity = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.08] });
   const combined = todayMinutes + timer.elapsedMinutes;
   const combinedProgress = combined / goalMinutes;
+  // One lap per hour of the session: motion, not a goal, so there is nothing
+  // to configure and nothing to explain. The floor keeps the hand visible as
+  // a marker at 12 rather than an invisible zero-length arc.
+  const minuteHand = (timer.elapsedMs % 3600000) / 3600000;
+  const hand = timer.active ? Math.max(0.008, minuteHand) : 0;
+  const state = timer.running ? "running" : timer.active ? "paused" : "idle";
+  const stateColor = state === "running" ? c.tint : state === "paused" ? c.gold : c.label3;
+  const stateLabel = state === "running" ? "Focusing" : state === "paused" ? "Paused" : "Ready when you are";
 
   return (
     <Card style={styles.timerCard}>
       <View style={styles.timerStage}>
-        <Animated.View
-          style={[
-            styles.timerHalo,
-            { opacity: timer.running ? haloOpacity : 0, transform: [{ scale: haloScale }], backgroundColor: c.tint },
-          ]}
-        />
-        <LinearGradient
-          colors={timer.running ? c.tintGradient : [c.surfaceSunken, c.surfaceSunken, c.surfaceSunken]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.timerRing}
-        >
+        <Ring size={252} stroke={10} progress={hand} fillColor={c.tint} bezel>
           <View style={styles.timerInner}>
             <Text style={styles.timerClock}>{formatClock(timer.elapsedMs)}</Text>
-            <Text style={styles.timerCaption}>{timer.running ? "Focusing" : timer.active ? "Paused" : "Ready when you are"}</Text>
+            <View style={styles.timerState}>
+              {state !== "idle" ? <View style={[styles.timerStateDot, { backgroundColor: stateColor }]} /> : null}
+              <Text style={[styles.timerCaption, { color: stateColor }]}>{stateLabel}</Text>
+            </View>
           </View>
-        </LinearGradient>
+        </Ring>
       </View>
 
       <View style={styles.timerProgress}>
@@ -2637,39 +2636,42 @@ function TimerCard({ timer, todayMinutes, goalMinutes = DAILY_GOAL_MINUTES, onFi
           <Pressable
             onPress={timer.start}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}
+            accessibilityLabel="Start focusing"
+            style={({ pressed }) => [styles.timerPrimaryWrap, pressed && { transform: [{ scale: 0.98 }] }]}
           >
-            <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaSmall}>
+            <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.timerPrimary}>
               <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
-              <Text style={styles.ctaTextSmall}>Start focusing</Text>
+              <Text style={styles.timerPrimaryText} numberOfLines={1}>Start focusing</Text>
             </LinearGradient>
           </Pressable>
         ) : (
           <>
             <Pressable
               onPress={onDiscard}
-              style={({ pressed }) => [styles.ghostSquare, pressed && { opacity: 0.6 }]}
               accessibilityRole="button"
               accessibilityLabel="Discard timer"
+              style={({ pressed }) => [styles.timerIconButton, pressed && { opacity: 0.6 }]}
             >
               <RotateCcw size={19} color={c.label2} />
             </Pressable>
             <Pressable
               onPress={timer.running ? timer.pause : timer.resume}
               accessibilityRole="button"
-              style={({ pressed }) => [styles.tintedButton, { flex: 1, marginTop: 0 }, pressed && { opacity: 0.7 }]}
+              accessibilityLabel={timer.running ? "Pause timer" : "Resume timer"}
+              style={({ pressed }) => [styles.timerSecondary, pressed && { opacity: 0.7 }]}
             >
               {timer.running ? <Pause size={18} color={c.tint} fill={c.tint} /> : <Play size={18} color={c.tint} fill={c.tint} />}
-              <Text style={styles.tintedButtonText}>{timer.running ? "Pause" : "Resume"}</Text>
+              <Text style={styles.timerSecondaryText} numberOfLines={1}>{timer.running ? "Pause" : "Resume"}</Text>
             </Pressable>
             <Pressable
               onPress={onFinish}
               accessibilityRole="button"
-              style={({ pressed }) => [styles.ctaWrap, { flex: 1 }, pressed && { transform: [{ scale: 0.98 }] }]}
+              accessibilityLabel="Log this session"
+              style={({ pressed }) => [styles.timerPrimaryWrap, pressed && { transform: [{ scale: 0.98 }] }]}
             >
-              <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.ctaSmall}>
+              <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.timerPrimary}>
                 <Square size={16} color="#FFFFFF" fill="#FFFFFF" />
-                <Text style={styles.ctaTextSmall}>Log it</Text>
+                <Text style={styles.timerPrimaryText} numberOfLines={1}>Log it</Text>
               </LinearGradient>
             </Pressable>
           </>
@@ -4598,21 +4600,8 @@ const makeStyles = (c) =>
       paddingHorizontal: 20,
     },
     filledButtonText: { color: "#FFFFFF", fontSize: 16, lineHeight: 22, fontFamily: BODY_BOLD, ...TEXT_FIX },
-    tintedButton: {
-      minHeight: 52,
-      borderRadius: 18,
-      backgroundColor: c.tintSoft,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 7,
-      paddingHorizontal: 12,
-      marginTop: 14,
-    },
-    tintedButtonText: { color: c.tint, fontSize: 15, lineHeight: 21, fontFamily: BODY_BOLD, ...TEXT_FIX },
     ghostButton: { minHeight: 52, borderRadius: 18, backgroundColor: c.fill, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
     ghostButtonText: { color: c.label2, fontSize: 15, lineHeight: 21, fontFamily: BODY_SEMI, ...TEXT_FIX },
-    ghostSquare: { width: 52, height: 52, borderRadius: 18, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" },
 
     // FAB
     fabWrap: { position: "absolute", alignSelf: "center", borderRadius: 30, overflow: "hidden" },
@@ -4691,9 +4680,7 @@ const makeStyles = (c) =>
     // TIMER
     timerCard: { alignItems: "center", paddingVertical: 28, paddingHorizontal: 18 },
     timerStage: { width: 268, height: 268, alignItems: "center", justifyContent: "center" },
-    timerHalo: { position: "absolute", width: 268, height: 268, borderRadius: 134 },
-    timerRing: { width: 252, height: 252, borderRadius: 126, alignItems: "center", justifyContent: "center", padding: 7 },
-    timerInner: { flex: 1, alignSelf: "stretch", borderRadius: 120, backgroundColor: c.surface, alignItems: "center", justifyContent: "center" },
+    timerInner: { width: 228, height: 228, borderRadius: 114, backgroundColor: c.surfaceRaised, alignItems: "center", justifyContent: "center" },
     timerClock: {
       fontSize: 50,
       lineHeight: 60,
@@ -4703,10 +4690,32 @@ const makeStyles = (c) =>
       fontVariant: ["tabular-nums"],
       ...TEXT_FIX,
     },
-    timerCaption: { marginTop: 4, fontSize: 14, lineHeight: 20, color: c.label2, fontFamily: BODY_SEMI, ...TEXT_FIX },
-    timerProgress: { alignSelf: "stretch", marginTop: 24 },
+    timerState: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+    timerStateDot: { width: 6, height: 6, borderRadius: 3 },
+    timerCaption: { fontSize: 14, lineHeight: 20, fontFamily: BODY_SEMI, ...TEXT_FIX },
+    timerProgress: { alignSelf: "stretch", marginTop: 22 },
     timerProgressText: { marginTop: 10, fontSize: 12, lineHeight: 18, color: c.label2, textAlign: "center", fontFamily: BODY, ...TEXT_FIX },
-    timerControls: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 22, alignSelf: "stretch" },
+    // One row, one height, one radius. The two flexible buttons split the
+    // space evenly (flexBasis 0) instead of sizing off their own labels.
+    timerControls: { flexDirection: "row", alignItems: "stretch", gap: 8, marginTop: 22, alignSelf: "stretch" },
+    timerIconButton: { width: 56, height: 56, borderRadius: 18, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" },
+    timerSecondary: {
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      height: 56,
+      borderRadius: 18,
+      backgroundColor: c.tintSoft,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+    },
+    timerSecondaryText: { color: c.tint, fontSize: 15, lineHeight: 21, fontFamily: BODY_BOLD, ...TEXT_FIX },
+    timerPrimaryWrap: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, height: 56, borderRadius: 18, overflow: "hidden" },
+    timerPrimary: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12, borderRadius: 18 },
+    timerPrimaryText: { color: "#FFFFFF", fontSize: 15, lineHeight: 21, fontFamily: BODY_BOLD, ...TEXT_FIX },
     todayCard: { padding: 18 },
     todayValue: {
       fontSize: 32,
