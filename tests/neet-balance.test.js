@@ -97,3 +97,24 @@ test("the syllabus table still tags every chapter", () => {
     expect(["High", "Medium", "Low"]).toContain(chapter.weightage);
   }
 });
+
+test("a session tagged with two subjects splits its time between them", () => {
+  const { subjects, totalMinutes } = subjectBalance([log("Physics, Chemistry", 120)]);
+  expect(totalMinutes).toBe(120);
+  const bySubject = Object.fromEntries(subjects.map((s) => [s.subject, s]));
+  expect(bySubject.Physics.minutes).toBe(60);
+  expect(bySubject.Chemistry.minutes).toBe(60);
+});
+
+test("a tag that mixes a paper subject with something else keeps the total", () => {
+  const result = subjectBalance([log("Physics, English", 60)]);
+  expect(result.totalMinutes).toBe(60);
+  expect(result.unmatchedMinutes).toBe(30);
+  expect(result.subjects.find((s) => s.subject === "Physics").minutes).toBe(30);
+});
+
+test("a subject typed in a phrase still lands in the balance", () => {
+  const { subjects } = subjectBalance([log("Organic chemistry", 90)]);
+  const bySubject = Object.fromEntries(subjects.map((s) => [s.subject, s]));
+  expect(bySubject.Chemistry.minutes).toBe(90);
+});

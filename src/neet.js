@@ -1,6 +1,7 @@
 // neet.js — NEET UG logic module
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { attributeMinutes } from './subjects';
 
 // ============================================
 // Constants
@@ -387,21 +388,6 @@ export async function deleteMock(coupleId, mockId) {
 // already encodes per chapter.
 const WEIGHT_POINTS = { High: 3, Medium: 2, Low: 1 };
 
-// Her logs are free text. Anything that is not one of the four paper subjects
-// is left out of the comparison rather than guessed at.
-const SUBJECT_ALIASES = {
-  physics: ['Physics'],
-  phy: ['Physics'],
-  chemistry: ['Chemistry'],
-  chem: ['Chemistry'],
-  botany: ['Botany'],
-  zoology: ['Zoology'],
-  biology: ['Botany', 'Zoology'],
-  bio: ['Botany', 'Zoology'],
-};
-
-const subjectKey = (value) => String(value ?? '').toLowerCase().replace(/[^a-z]/g, '');
-
 // What share of the paper each subject is worth, derived from the chapter
 // weightage table. Pure, so the Insights card and its test share one source.
 export function subjectExamShares(syllabus = SYLLABUS) {
@@ -425,7 +411,7 @@ export function subjectBalance(logs = [], { from, to } = {}) {
   const shares = subjectExamShares();
   const minutes = Object.fromEntries(shares.map((item) => [item.subject, 0]));
   let total = 0;
-  let unmatched = 0;
+  let unmatchedTotal = 0;
 
   for (const log of Array.isArray(logs) ? logs : []) {
     const date = String(log?.date ?? '');
@@ -434,19 +420,18 @@ export function subjectBalance(logs = [], { from, to } = {}) {
     const duration = Number(log?.duration);
     if (!Number.isFinite(duration) || duration <= 0) continue;
     total += duration;
-    const targets = SUBJECT_ALIASES[subjectKey(log?.subject)];
-    if (!targets) {
-      unmatched += duration;
-      continue;
+    // A session can name several subjects; its minutes split between them, and
+    // anything outside the syllabus is reported rather than guessed at.
+    const { bySubject, unmatched } = attributeMinutes(log?.subject, duration);
+    unmatchedTotal += unmatched;
+    for (const [subject, value] of Object.entries(bySubject)) {
+      minutes[subject] = (minutes[subject] ?? 0) + value;
     }
-    // "Biology" is two subjects in the syllabus; split it evenly.
-    const each = duration / targets.length;
-    for (const subject of targets) minutes[subject] += each;
   }
 
   return {
     totalMinutes: Math.round(total),
-    unmatchedMinutes: Math.round(unmatched),
+    unmatchedMinutes: Math.round(unmatchedTotal),
     subjects: shares.map((item) => {
       const share = total ? minutes[item.subject] / total : 0;
       return {
