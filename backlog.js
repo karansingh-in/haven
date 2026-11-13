@@ -226,6 +226,7 @@ export const DEFAULT_PREFS = {
   windDownEnabled: true,
   windDownHour: 2,
   windDownMinute: 0,
+  breakNudges: true,
   weeklyReportEnabled: true,
   weeklyWeekday: 1, // Sunday (0=Sun per JS? we store expo weekday 1=Sunday)
   weeklyHour: 20,

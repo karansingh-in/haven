@@ -18,6 +18,29 @@ if (Platform.OS !== "web") {
 
 const SCHEDULED_KEY = "haven-notif-scheduled-v1";
 
+// The nudge for a day with nothing logged. Her own words, so it stays hers.
+export const ZERO_DAY_LINE = "Shram aati hai?";
+
+const summaryLine = ({ todayText, backlogText, streak, daysLeft }) => {
+  const parts = [`${todayText} today`, backlogText];
+  if (streak) parts.push(`${streak}-day streak`);
+  if (daysLeft !== undefined && daysLeft !== null) parts.push(`${daysLeft} days to NEET`);
+  return parts.join(" · ");
+};
+
+// Both bodies are pure so they can be tested without a notification scheduler.
+export function windDownBody({ todayText, todayMinutes, backlogText, streak, daysLeft }) {
+  const summary = summaryLine({ todayText, backlogText, streak, daysLeft });
+  if (Number(todayMinutes) > 0) return `${summary}. Goodnight.`;
+  return `${ZERO_DAY_LINE} ${summary}. Goodnight.`;
+}
+
+export function weeklyBody({ todayText, todayMinutes, backlogText, streak, daysLeft }) {
+  const summary = summaryLine({ todayText, backlogText, streak, daysLeft });
+  if (Number(todayMinutes) > 0) return `${summary}. Open Haven for the full breakdown.`;
+  return `${ZERO_DAY_LINE} ${summary}. Open Haven for the full breakdown.`;
+}
+
 export async function ensureNotificationSetup() {
   if (Platform.OS === "web") return;
   try {
@@ -115,7 +138,13 @@ export async function scheduleWeeklyReport({ weekday, hour, minute, enabled }) {
 }
 
 // Dynamic content: reschedule wind-down/weekly with today's computed numbers in body.
-export async function refreshNotificationBodies({ todayText, backlogText, streak, daysLeft }) {
+export async function refreshNotificationBodies({
+  todayText,
+  todayMinutes,
+  backlogText,
+  streak,
+  daysLeft,
+}) {
   if (Platform.OS === "web") return;
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -127,7 +156,7 @@ export async function refreshNotificationBodies({ todayText, backlogText, streak
         identifier: wind.identifier,
         content: {
           title: "Wind down, Chaaru",
-          body: `${todayText} today · ${backlogText}${streak ? ` · ${streak}-day streak` : ""} · ${daysLeft ?? 0} days to NEET. Goodnight.`,
+          body: windDownBody({ todayText, todayMinutes, backlogText, streak, daysLeft }),
           data: { kind: "winddown" },
         },
         trigger: wind.trigger,
@@ -139,11 +168,62 @@ export async function refreshNotificationBodies({ todayText, backlogText, streak
         identifier: weekly.identifier,
         content: {
           title: "Your weekly Haven report",
-          body: `${todayText} today · ${backlogText}${streak ? ` · ${streak}-day streak` : ""}. Open Haven for the full breakdown.`,
+          body: weeklyBody({ todayText, todayMinutes, backlogText, streak, daysLeft }),
           data: { kind: "weekly" },
         },
         trigger: weekly.trigger,
       });
+    }
+  } catch {}
+}
+
+// Break nudges: two one-shot notifications, fired relative to the moment the
+// timer starts. `seconds` is what the timer has been running, not wall clock,
+// so pausing and resuming simply cancels and re-arms them.
+export const BREAK_NUDGES = [
+  {
+    identifier: "haven-break-50",
+    seconds: 50 * 60,
+    body: "50 minutes in. Stand up, drink some water.",
+  },
+  {
+    identifier: "haven-break-90",
+    seconds: 90 * 60,
+    body: "90 minutes straight. Take ten — the streak will still be here.",
+  },
+];
+
+export async function scheduleFocusBreaks({ enabled = true } = {}) {
+  if (Platform.OS === "web") return;
+  try {
+    await cancelFocusBreaks();
+    if (!enabled) return;
+    for (const nudge of BREAK_NUDGES) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: nudge.identifier,
+        content: {
+          title: "Break, Chaaru",
+          body: nudge.body,
+          data: { kind: "break" },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: nudge.seconds,
+          repeats: false,
+          channelId: Platform.OS === "android" ? "haven-reminders" : undefined,
+        },
+      });
+    }
+  } catch (e) {
+    console.warn("break nudge schedule failed", e);
+  }
+}
+
+export async function cancelFocusBreaks() {
+  if (Platform.OS === "web") return;
+  try {
+    for (const nudge of BREAK_NUDGES) {
+      await Notifications.cancelScheduledNotificationAsync(nudge.identifier);
     }
   } catch {}
 }

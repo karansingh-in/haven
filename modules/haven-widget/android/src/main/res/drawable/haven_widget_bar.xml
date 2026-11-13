@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gold, not the accent: a widget drawable cannot be recoloured at runtime
+     before Android 12, and gold is the colour of a day that hit its goal. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:id="@android:id/background">
+    <shape android:shape="rectangle">
+      <solid android:color="#1C2839" />
+      <corners android:radius="4dp" />
+    </shape>
+  </item>
+  <item android:id="@android:id/progress">
+    <clip>
+      <shape android:shape="rectangle">
+        <solid android:color="#F2C14E" />
+        <corners android:radius="4dp" />
+      </shape>
+    </clip>
+  </item>
+</layer-list>

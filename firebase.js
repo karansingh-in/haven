@@ -18,6 +18,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
+import { dropSession, pendingSessions, queueSession } from "./src/outbox";
 
 // Keep your EXISTING Firebase config values here.
 const firebaseConfig = {
@@ -150,11 +151,20 @@ export const updateCoupleSymptoms = async (coupleId, dayKey, ids) => {
 // STUDY
 // --------------------------------------------------
 
-export const logStudySession = async (
-  coupleId,
-  session,
-  recentSubjects = null,
-) => {
+// A write that fails because the device is offline is retryable; anything else
+// (auth, permissions, malformed data) is not, and should still fail loudly.
+const NETWORK_CODES = new Set([
+  "unavailable",
+  "deadline-exceeded",
+  "internal",
+  "network-request-failed",
+  "cancelled",
+]);
+
+export const isNetworkError = (error) =>
+  NETWORK_CODES.has(error?.code) || /network|offline|failed to fetch/i.test(String(error?.message ?? ""));
+
+const writeSession = async (coupleId, session, recentSubjects) => {
   const coupleRef = doc(db, "couples", coupleId);
 
   const update = {
@@ -166,6 +176,43 @@ export const logStudySession = async (
   }
 
   await updateDoc(coupleRef, update);
+};
+
+// Returns `{ queued: true }` when the session was held locally instead of
+// written, so a caller can say so. Never throws for a network failure.
+export const logStudySession = async (
+  coupleId,
+  session,
+  recentSubjects = null,
+) => {
+  try {
+    await writeSession(coupleId, session, recentSubjects);
+    return { queued: false };
+  } catch (error) {
+    if (!isNetworkError(error)) throw error;
+    await queueSession(coupleId, session);
+    return { queued: true };
+  }
+};
+
+// Replay the outbox. Stops at the first network failure so the queue keeps its
+// order; a permanently rejected session is dropped rather than retried forever.
+export const flushPendingSessions = async (coupleId) => {
+  const pending = await pendingSessions(coupleId);
+  if (!pending.length) return 0;
+  let flushed = 0;
+  for (const session of pending) {
+    try {
+      await writeSession(coupleId, session, null);
+      await dropSession(coupleId, session.timestamp);
+      flushed += 1;
+    } catch (error) {
+      if (isNetworkError(error)) break;
+      console.warn("Dropping a session the server rejected", error);
+      await dropSession(coupleId, session.timestamp);
+    }
+  }
+  return flushed;
 };
 
 // --------------------------------------------------

@@ -378,3 +378,84 @@ export async function deleteMock(coupleId, mockId) {
     return false;
   }
 }
+// ============================================
+// Time vs weightage
+// ============================================
+
+// High-yield chapters are worth more of the paper than low-yield ones. The
+// ratio 3:2:1 is the usual NEET convention and is what the syllabus table
+// already encodes per chapter.
+const WEIGHT_POINTS = { High: 3, Medium: 2, Low: 1 };
+
+// Her logs are free text. Anything that is not one of the four paper subjects
+// is left out of the comparison rather than guessed at.
+const SUBJECT_ALIASES = {
+  physics: ['Physics'],
+  phy: ['Physics'],
+  chemistry: ['Chemistry'],
+  chem: ['Chemistry'],
+  botany: ['Botany'],
+  zoology: ['Zoology'],
+  biology: ['Botany', 'Zoology'],
+  bio: ['Botany', 'Zoology'],
+};
+
+const subjectKey = (value) => String(value ?? '').toLowerCase().replace(/[^a-z]/g, '');
+
+// What share of the paper each subject is worth, derived from the chapter
+// weightage table. Pure, so the Insights card and its test share one source.
+export function subjectExamShares(syllabus = SYLLABUS) {
+  const points = {};
+  let total = 0;
+  for (const chapter of Array.isArray(syllabus) ? syllabus : []) {
+    const subject = chapter?.subject;
+    if (!subject) continue;
+    const value = WEIGHT_POINTS[chapter.weightage] ?? 1;
+    points[subject] = (points[subject] ?? 0) + value;
+    total += value;
+  }
+  return Object.entries(points)
+    .map(([subject, value]) => ({ subject, points: value, examShare: total ? value / total : 0 }))
+    .sort((a, b) => b.examShare - a.examShare);
+}
+
+// Where the hours actually went, next to what the paper is worth. `delta` is
+// positive when a subject is getting more time than its share of the paper.
+export function subjectBalance(logs = [], { from, to } = {}) {
+  const shares = subjectExamShares();
+  const minutes = Object.fromEntries(shares.map((item) => [item.subject, 0]));
+  let total = 0;
+  let unmatched = 0;
+
+  for (const log of Array.isArray(logs) ? logs : []) {
+    const date = String(log?.date ?? '');
+    if (from && date < from) continue;
+    if (to && date > to) continue;
+    const duration = Number(log?.duration);
+    if (!Number.isFinite(duration) || duration <= 0) continue;
+    total += duration;
+    const targets = SUBJECT_ALIASES[subjectKey(log?.subject)];
+    if (!targets) {
+      unmatched += duration;
+      continue;
+    }
+    // "Biology" is two subjects in the syllabus; split it evenly.
+    const each = duration / targets.length;
+    for (const subject of targets) minutes[subject] += each;
+  }
+
+  return {
+    totalMinutes: Math.round(total),
+    unmatchedMinutes: Math.round(unmatched),
+    subjects: shares.map((item) => {
+      const share = total ? minutes[item.subject] / total : 0;
+      return {
+        subject: item.subject,
+        minutes: Math.round(minutes[item.subject]),
+        timeShare: share,
+        examShare: item.examShare,
+        delta: share - item.examShare,
+      };
+    }),
+  };
+}

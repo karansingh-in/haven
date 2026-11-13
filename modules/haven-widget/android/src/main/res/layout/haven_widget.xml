@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flat, generous, and text-first: the number is the hero, the bar is the only
+     ornament. Colours match the app's dark theme. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/haven_widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:background="@drawable/haven_widget_bg"
+  android:padding="18dp">
+
+  <TextView
+    android:id="@+id/haven_widget_kicker"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:letterSpacing="0.14"
+    android:text="TODAY"
+    android:textColor="#8FA3BF"
+    android:textSize="10sp"
+    android:textStyle="bold" />
+
+  <TextView
+    android:id="@+id/haven_widget_value"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:text="—"
+    android:textColor="#FFFFFF"
+    android:textSize="32sp"
+    android:textStyle="bold" />
+
+  <ProgressBar
+    android:id="@+id/haven_widget_bar"
+    style="?android:attr/progressBarStyleHorizontal"
+    android:layout_width="match_parent"
+    android:layout_height="6dp"
+    android:layout_marginTop="10dp"
+    android:max="100"
+    android:progress="0"
+    android:progressDrawable="@drawable/haven_widget_bar" />
+
+  <TextView
+    android:id="@+id/haven_widget_goal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:text="Open Haven to sync."
+    android:textColor="#8FA3BF"
+    android:textSize="12sp" />
+
+  <TextView
+    android:id="@+id/haven_widget_dots"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:letterSpacing="0.1"
+    android:textColor="#F2C14E"
+    android:textSize="10sp" />
+
+  <TextView
+    android:id="@+id/haven_widget_stats"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:textColor="#FFFFFF"
+    android:textSize="12sp" />
+
+  <TextView
+    android:id="@+id/haven_widget_updated"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:maxLines="1"
+    android:textColor="#5C6E85"
+    android:textSize="10sp" />
+
+</LinearLayout>

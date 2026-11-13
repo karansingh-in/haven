@@ -1,0 +1,7 @@
+{
+  "name": "haven-widget",
+  "version": "1.0.0",
+  "description": "Haven's Android home-screen widget: reads the summary the app writes and renders it.",
+  "main": "index.js",
+  "private": true
+}
