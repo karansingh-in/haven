@@ -167,6 +167,7 @@ import {
   parseDateKey,
 } from "./src/dates";
 import { cycleSummary, easedDayKeys, softenedGoalMinutes } from "./src/cycle";
+import { PAPER_SUBJECTS, parseSubjects, toggleSubject } from "./src/subjects";
 
 // ============================================================
 // TYPE — Inter (tabular nums for figures)
@@ -2504,7 +2505,14 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
     const cleanedSubject = subject.trim();
     if (!cleanedSubject) throw new Error("Add a subject first.");
     if (!minutes || minutes <= 0) throw new Error("Set how long you studied.");
-    const updatedSubjects = [cleanedSubject, ...recentSubjects.filter((item) => item !== cleanedSubject)].slice(0, 6);
+    // Recent subjects stay individual, so a later chip row can offer them
+    // back one at a time.
+    const picked = parseSubjects(cleanedSubject);
+    const previous = recentSubjects.flatMap((item) => {
+      const names = parseSubjects(item);
+      return names.length ? names : [item];
+    });
+    const updatedSubjects = [...picked, ...previous.filter((item) => !picked.includes(item))].slice(0, 6);
     // Stamp with the logical day at save time, not the day the screen rendered on.
     const stamp = dayKeyFor(new Date());
     await logStudySession(
@@ -3164,7 +3172,7 @@ const NEET_CATEGORIES = [
   { value: "ST", label: "ST" },
 ];
 
-const NEET_SUBJECTS = ["Physics", "Chemistry", "Botany", "Zoology"];
+const NEET_SUBJECTS = PAPER_SUBJECTS;
 
 const MISTAKE_REASON_LABELS = {
   concept: "Concept gap",
@@ -3865,6 +3873,27 @@ function StudySheet({ visible, prefill, onClose, onSave }) {
           <Text style={styles.fieldLabel}>Subject</Text>
           <TextInput value={subject} onChangeText={setSubject} placeholder="Chemistry" placeholderTextColor={c.label3} accessibilityLabel="Subject" style={styles.fieldInput} />
         </View>
+        <View style={styles.separatorInset} />
+        <View style={[styles.chipWrap, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16 }]}>
+          {PAPER_SUBJECTS.map((name) => {
+            const active = parseSubjects(subject).includes(name);
+            return (
+              <Pressable
+                key={name}
+                onPress={() => setSubject((current) => toggleSubject(current, name))}
+                style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${name}${active ? ", selected" : ""}`}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.sheetHint, { paddingHorizontal: 16, paddingBottom: 14 }]}>
+          Pick any that apply. The time splits evenly between them.
+        </Text>
       </View>
 
       <SectionHeader title="How long" />
