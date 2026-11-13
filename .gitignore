@@ -42,6 +42,9 @@ example
 /ios
 /android
 
+# local Expo module build output
+modules/*/android/build/
+
 # build artifacts and local logs
 dist-new/
 dist-pink/

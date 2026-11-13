@@ -11,6 +11,10 @@ A private, single-user study app for NEET UG — one person, one iPad, no accoun
 - **Gold days** — the full-screen moment when the eight hours land, recorded so you can see the chain later.
 - **Calendar** with cycle tracking, and **Insights** for weekly and monthly totals.
 - **NEET tab** — countdown, syllabus coverage with chapter weightage, and a mock-score predictor.
+- **Where your hours go** — each subject's share of the week next to its share of the paper, and the worst mismatch named.
+- **Offline outbox** — a session logged without a connection is queued locally, counted immediately, and replayed when the network returns.
+- **Break nudges** at 50 and 90 minutes of a running timer, and a wind-down notification that says so when the day is still at zero.
+- **Home-screen widget** on Android, fed by a JSON summary the app writes to its own storage — no network, no permissions.
 
 Single user by design: data lives in your own Firestore project, and nothing is shared with anyone.
 
@@ -20,9 +24,24 @@ Single user by design: data lives in your own Firestore project, and nothing is 
 npm install
 npm run web        # browser, at http://localhost:8081
 npm run android    # native Android build
-npx jest           # 53 tests
+npm run apk        # sideloadable arm64 release APK
+npx jest           # 197 tests
 npm run lint
 ```
+
+## Fonts
+
+The app ships two faces: **Fraunces** for headings, **Inter** for body copy and figures. Both are subset to the glyphs the UI actually draws, which takes them from 1.37 MB to 238 KB:
+
+```bash
+npm run fonts      # scripts/subset-fonts.py -> assets/fonts/*.ttf
+```
+
+The outputs are committed, so a clean clone builds without Python. Add any new character to `UNICODE` in the script before using it in a string — anything outside that set falls back to the system font.
+
+## Widget
+
+`modules/haven-widget/` is a local Expo module (autolinked from `modules/` via `expo.autolinking.nativeModulesDir`). The app writes a nine-field JSON summary to its own `filesDir`; an `AppWidgetProvider` renders it. Long-press the home screen → Widgets → Haven. It lives outside `android/` so `expo prebuild` cannot wipe it.
 
 ## Icons
 
