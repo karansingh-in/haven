@@ -11,7 +11,10 @@
   </defs>
   <rect width="1024" height="1024" fill="url(#bg)"/>
   <!-- A doorway: one even stroke, open at the bottom. Centred on 512 in both
-       axes once the round caps are counted, so it sits true in the square. -->
-  <path d="M 272 752 V 512 A 240 240 0 0 1 752 512 V 752" fill="none"
-        stroke="url(#mark)" stroke-width="104" stroke-linecap="round"/>
+       axes once the round caps are counted, so it sits true in the square.
+       Scaled to 0.85 to leave more room around it. -->
+  <g transform="translate(512 512) scale(0.85) translate(-512 -512)">
+    <path d="M 272 752 V 512 A 240 240 0 0 1 752 512 V 752" fill="none"
+          stroke="url(#mark)" stroke-width="104" stroke-linecap="round"/>
+  </g>
 </svg>

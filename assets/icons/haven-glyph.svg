@@ -5,9 +5,9 @@
       <stop offset="1" stop-color="#FF6E9C"/>
     </linearGradient>
   </defs>
-  <!-- Scaled to 0.78 so the arch stays inside Android's adaptive-icon safe
+  <!-- Scaled to 0.66 so the arch stays inside Android's adaptive-icon safe
        circle, which only guarantees the middle 66%. -->
-  <g transform="translate(512 512) scale(0.78) translate(-512 -512)">
+  <g transform="translate(512 512) scale(0.66) translate(-512 -512)">
     <path d="M 272 752 V 512 A 240 240 0 0 1 752 512 V 752" fill="none"
           stroke="url(#mark)" stroke-width="104" stroke-linecap="round"/>
   </g>
