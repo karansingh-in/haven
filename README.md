@@ -14,6 +14,7 @@ A private, single-user study app for NEET UG — one person, one iPad, no accoun
 - **Where your hours go** — each subject's share of the week next to its share of the paper, and the worst mismatch named.
 - **Offline outbox** — a session logged without a connection is queued locally, counted immediately, and replayed when the network returns.
 - **Break nudges** at 50 and 90 minutes of a running timer, and a wind-down notification that says so when the day is still at zero.
+- **A question when a day falls short** — log a session after 9pm while under the goal and the app asks what got in the way, once. The answers collect in Insights, on this device only.
 - **Home-screen widget** on Android, fed by a JSON summary the app writes to its own storage — no network, no permissions.
 
 Single user by design: data lives in your own Firestore project, and nothing is shared with anyone.
@@ -31,7 +32,7 @@ npm run lint
 
 ## Fonts
 
-The app ships two faces: **Fraunces** for headings, **Inter** for body copy and figures. Both are subset to the glyphs the UI actually draws, which takes them from 1.37 MB to 238 KB:
+The app ships one face: **Inter**, in four weights. They are subset to the glyphs the UI actually draws, which takes them from 1.37 MB to 170 KB:
 
 ```bash
 npm run fonts      # scripts/subset-fonts.py -> assets/fonts/*.ttf

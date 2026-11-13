@@ -79,10 +79,6 @@ import Inter_400Regular from "./assets/fonts/Inter_400Regular.ttf";
 import Inter_500Medium from "./assets/fonts/Inter_500Medium.ttf";
 import Inter_600SemiBold from "./assets/fonts/Inter_600SemiBold.ttf";
 import Inter_700Bold from "./assets/fonts/Inter_700Bold.ttf";
-// Headings only: a soft serif so the page has a voice of its own. Numbers and
-// body copy stay in Inter, which is what makes the serif read as intentional.
-import Fraunces_600 from "./assets/fonts/Fraunces-600.ttf";
-import Fraunces_600_Italic from "./assets/fonts/Fraunces-600-Italic.ttf";
 import { onAuthStateChanged } from "firebase/auth";
 import {
     auth,
@@ -160,6 +156,7 @@ import { ACCENTS, ACCENT_OPTIONS, applyAccent, DARK, LIGHT } from "./src/palette
 import { buildWidgetPayload } from "./src/widget";
 import { mergeSessions, pendingSessions, subscribeOutbox } from "./src/outbox";
 import { weeklyReportText } from "./src/report";
+import { loadGoalNotes, recentNotes, saveGoalNote, shouldAskGoalNote } from "./src/goalNotes";
 import { updateHavenWidget } from "./modules/haven-widget";
 import {
   addDaysToKey,
@@ -175,8 +172,8 @@ import { cycleSummary, easedDayKeys, softenedGoalMinutes } from "./src/cycle";
 // TYPE — Inter (tabular nums for figures)
 // ============================================================
 
-const DISPLAY = "Fraunces_600";
-const DISPLAY_ITALIC = "Fraunces_600_Italic";
+const DISPLAY = "Inter_700Bold";
+const DISPLAY_ITALIC = "Inter_700Bold";
 const BODY = "Inter_400Regular";
 const BODY_MED = "Inter_500Medium";
 const BODY_SEMI = "Inter_600SemiBold";
@@ -624,8 +621,6 @@ function FontGate({ children }) {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    Fraunces_600,
-    Fraunces_600_Italic,
   });
   if (!fontsLoaded) {
     return (
@@ -2457,6 +2452,10 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
   const { isWide } = useLayout();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [prefill, setPrefill] = useState(null);
+  // The missed-goal note waits for the log sheet to close: two Modals stacked
+  // on top of each other is a mess on both platforms.
+  const [goalNote, setGoalNote] = useState(null);
+  const [goalNoteOpen, setGoalNoteOpen] = useState(false);
 
   const logs = Array.isArray(coupleData.studyLogs)
     ? [...coupleData.studyLogs].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -2475,6 +2474,12 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
     setPrefill(null);
     setSheetOpen(true);
   };
+
+  // The note sheet is opened on a short delay rather than in the same commit
+  // that dismisses the log sheet: stacking two native modals drops the second
+  // one on iOS. The delay is the log sheet's own slide-out.
+  const noteTimer = useRef(null);
+  useEffect(() => () => clearTimeout(noteTimer.current), []);
 
   const finishTimer = () => {
     const minutes = timer.elapsedMinutes;
@@ -2508,6 +2513,34 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
       updatedSubjects,
     );
     timer.reset();
+
+    // End of the day, short of the goal, once: one question about what got in
+    // the way. It never blocks the save, and skipping it counts as an answer
+    // so the same evening cannot ask twice.
+    if (stamp === today) {
+      const withSession = todayMinutes + minutes;
+      const notesSoFar = await loadGoalNotes(coupleId);
+      if (shouldAskGoalNote({ dayKey: stamp, minutes: withSession, goalMinutes, notes: notesSoFar, now: new Date() })) {
+        noteTimer.current = setTimeout(() => {
+          setGoalNote({ dayKey: stamp, minutes: withSession });
+          setGoalNoteOpen(true);
+        }, 340);
+      }
+    }
+  };
+
+  const closeGoalNote = async () => {
+    const target = goalNote;
+    setGoalNoteOpen(false);
+    setGoalNote(null);
+    if (target) await saveGoalNote(coupleId, target.dayKey, { skipped: true });
+  };
+
+  const keepGoalNote = async (text) => {
+    const target = goalNote;
+    setGoalNoteOpen(false);
+    setGoalNote(null);
+    if (target) await saveGoalNote(coupleId, target.dayKey, { text });
   };
 
   const removeLog = (log) => {
@@ -2648,6 +2681,16 @@ function StudyScreen({ coupleData, coupleId, timer, backlog, streak, goalMinutes
           setSheetOpen(false);
         }}
       />
+      <GoalNoteSheet
+        // A fresh mount per day is what clears the textarea, so there is no
+        // reset effect to fight with the animation.
+        key={goalNote?.dayKey ?? "none"}
+        visible={goalNoteOpen}
+        minutes={goalNote?.minutes ?? todayMinutes}
+        goalMinutes={goalMinutes}
+        onClose={closeGoalNote}
+        onSave={keepGoalNote}
+      />
     </>
   );
 }
@@ -2745,6 +2788,20 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [], 
   const { c } = useTheme();
   const styles = useStyles();
   const [testOpen, setTestOpen] = useState(false);
+  // Local-only, like gold days, so it is read here rather than passed down.
+  const [goalNotes, setGoalNotes] = useState({});
+
+  useEffect(() => {
+    let live = true;
+    loadGoalNotes(coupleId).then((stored) => {
+      if (live) setGoalNotes(stored);
+    });
+    return () => {
+      live = false;
+    };
+  }, [coupleId]);
+
+  const whyNotes = useMemo(() => recentNotes(goalNotes, 6), [goalNotes]);
 
   const goldMonthCount = useMemo(() => {
     const prefix = dayKeyFor().slice(0, 7);
@@ -2966,6 +3023,28 @@ function InsightsScreen({ coupleData, coupleId, backlog, streak, goldDays = [], 
               outside the syllabus.
             </Text>
           ) : null}
+        </Card>
+      )}
+
+      <SectionHeader title="Why days fell short" />
+      {whyNotes.length === 0 ? (
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyCardTitle}>Nothing recorded yet</Text>
+          <Text style={styles.emptyCardBody}>
+            When a day ends short of the goal, Study asks what got in the way. Your answers collect here.
+          </Text>
+        </Card>
+      ) : (
+        <Card>
+          {whyNotes.map((note, index) => (
+            <View key={note.dayKey}>
+              {index > 0 ? <View style={styles.separatorInset} /> : null}
+              <View style={styles.noteRow}>
+                <Text style={styles.noteDate}>{formatRelativeDate(note.dayKey)}</Text>
+                <Text style={styles.noteText}>{note.text}</Text>
+              </View>
+            </View>
+          ))}
         </Card>
       )}
 
@@ -3837,6 +3916,65 @@ function StudySheet({ visible, prefill, onClose, onSave }) {
   );
 }
 
+function GoalNoteSheet({ visible, minutes, goalMinutes, onClose, onSave }) {
+  const { c } = useTheme();
+  const styles = useStyles();
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    try {
+      setSaving(true);
+      await onSave(text);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const short = Math.max(0, goalMinutes - minutes);
+
+  return (
+    <Sheet
+      visible={visible}
+      title="What got in the way?"
+      subtitle={`${formatDuration(minutes)} of ${formatDuration(goalMinutes)} — ${formatDuration(short)} short.`}
+      onClose={onClose}
+    >
+      <Text style={styles.goalNoteIntro}>
+        Not a mark against you. Just a line about today, so the pattern is visible later.
+      </Text>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Slept through the alarm, family function, couldn't settle…"
+        placeholderTextColor={c.label3}
+        accessibilityLabel="Why today fell short"
+        multiline
+        maxLength={280}
+        autoFocus
+        style={[styles.goalNoteInput, { color: c.label, backgroundColor: c.fill }]}
+      />
+      <Text style={styles.sheetHint}>Kept on this device only. {280 - text.length} characters left.</Text>
+
+      <Pressable
+        onPress={submit}
+        disabled={saving || !text.trim()}
+        accessibilityRole="button"
+        aria-busy={saving}
+        style={({ pressed }) => [styles.ctaWrap, (saving || !text.trim()) && { opacity: 0.45 }, pressed && { transform: [{ scale: 0.98 }] }]}
+      >
+        <LinearGradient colors={c.tintGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save note</Text>}
+        </LinearGradient>
+      </Pressable>
+
+      <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" style={{ alignSelf: "center", marginTop: 14 }}>
+        <Text style={styles.link}>Skip tonight</Text>
+      </Pressable>
+    </Sheet>
+  );
+}
+
 function DateField({ label, value, onChange, onClear, optional }) {
   const { c } = useTheme();
   const styles = useStyles();
@@ -4593,8 +4731,8 @@ const makeStyles = (c) =>
     },
     heroLine: {
       marginTop: 6,
-      fontSize: 19,
-      lineHeight: 24,
+      fontSize: 21,
+      lineHeight: 26,
       fontFamily: DISPLAY,
       color: "#FFFFFF",
       ...TEXT_FIX,
@@ -4961,6 +5099,11 @@ const makeStyles = (c) =>
     sheetSubtitle: { marginTop: 4, fontSize: 13, lineHeight: 19, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
     sheetClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" },
     sheetHint: { marginTop: 12, paddingHorizontal: 4, fontSize: 12, lineHeight: 18, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
+    goalNoteIntro: { marginTop: 6, marginBottom: 12, paddingHorizontal: 4, fontSize: 14, lineHeight: 21, color: c.label2, fontFamily: BODY, ...TEXT_FIX },
+    goalNoteInput: { minHeight: 132, borderRadius: 16, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, fontSize: 15, lineHeight: 22, fontFamily: BODY, textAlignVertical: "top", ...TEXT_FIX },
+    noteRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
+    noteDate: { fontSize: 12, lineHeight: 16, fontFamily: BODY_SEMI, color: c.label3, letterSpacing: 0.4, textTransform: "uppercase", ...TEXT_FIX },
+    noteText: { fontSize: 15, lineHeight: 22, fontFamily: BODY, color: c.label, ...TEXT_FIX },
     footerTap: { alignSelf: "center", paddingHorizontal: 12, paddingVertical: 4 },
     goalStepper: { flexDirection: "row", gap: 8 },
     goalStep: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: c.fill },

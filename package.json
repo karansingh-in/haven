@@ -46,6 +46,7 @@
     "sharp": "^0.35.5"
   },
   "devDependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
