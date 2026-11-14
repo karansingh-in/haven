@@ -3874,25 +3874,29 @@ function StudySheet({ visible, prefill, onClose, onSave }) {
           <TextInput value={subject} onChangeText={setSubject} placeholder="Chemistry" placeholderTextColor={c.label3} accessibilityLabel="Subject" style={styles.fieldInput} />
         </View>
         <View style={styles.separatorInset} />
-        <View style={[styles.chipWrap, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16 }]}>
+        <View style={[styles.chipWrap, { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, gap: 6, marginBottom: 0 }]}>
           {PAPER_SUBJECTS.map((name) => {
             const active = parseSubjects(subject).includes(name);
             return (
               <Pressable
                 key={name}
                 onPress={() => setSubject((current) => toggleSubject(current, name))}
-                style={[styles.chip, active && { backgroundColor: c.tint, borderColor: c.tint }]}
+                style={[
+                  styles.chip,
+                  { backgroundColor: c.bg, borderColor: c.separator, paddingHorizontal: 10 },
+                  active && { backgroundColor: c.tint, borderColor: c.tint },
+                ]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 accessibilityLabel={`${name}${active ? ", selected" : ""}`}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{name}</Text>
+                <Text style={[styles.chipText, { fontSize: 13, lineHeight: 18 }, active && styles.chipTextActive]}>{name}</Text>
               </Pressable>
             );
           })}
         </View>
-        <Text style={[styles.sheetHint, { paddingHorizontal: 16, paddingBottom: 14 }]}>
-          Pick any that apply. The time splits evenly between them.
+        <Text style={[styles.sheetHint, { marginTop: 0, paddingHorizontal: 14, paddingBottom: 14 }]}>
+          Pick any that apply. Time splits evenly.
         </Text>
       </View>
 
